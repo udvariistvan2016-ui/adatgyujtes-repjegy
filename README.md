@@ -2,6 +2,8 @@
 
 Napi pillanatfelvétel Budapest–Madrid jegyárakról. Visszamenőleg ez az adat nem rekonstruálható.
 
+Repo: https://github.com/udvariistvan2016-ui/adatgyujtes-repjegy
+
 ## Mit gyűjt
 
 - **Horizont:** egyirányú BUD→MAD, economy, 1 felnőtt, csak közvetlen, **180 nap** előre, HUF, megjelenő legalacsonyabb (basic) ár.
@@ -59,6 +61,8 @@ A futás végén a kimenet: `planned=… ok=… empty=… error=…`. Ha `error>
 ## Dashboard (GitHub Pages)
 
 A `docs/index.html` statikus oldal: utolsó futás, gyűjtési naptár (siker / hiba / hiányzó nap), sikertelen keresések, kitűzött út ára.
+
+Élő: https://udvariistvan2016-ui.github.io/adatgyujtes-repjegy/
 
 ```powershell
 python -m farewatch dashboard
