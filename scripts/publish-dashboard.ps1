@@ -3,7 +3,7 @@ $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
 if (-not (Test-Path (Join-Path $Root ".git"))) {
-    Write-Host "Nincs git repo — a dashboard helyben marad (docs/index.html)."
+    Write-Host "Nincs git repo, a dashboard helyben marad: docs/index.html"
     exit 0
 }
 
@@ -14,6 +14,6 @@ if (-not $Changed) {
     exit 0
 }
 
-$Stamp = Get-Date -Format "yyyy-MM-dd HH:mm"
-git commit -m "Dashboard frissites $Stamp"
+$Stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
+git commit -m ("Dashboard " + $Stamp)
 git push
