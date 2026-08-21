@@ -8,7 +8,7 @@ from typing import Any
 from farewatch.config import Settings
 from farewatch.db import connect
 
-TEMPLATE = """<!DOCTYPE html>
+TEMPLATE = r"""<!DOCTYPE html>
 <html lang="hu">
 <head>
   <meta charset="utf-8">
@@ -16,45 +16,24 @@ TEMPLATE = """<!DOCTYPE html>
   <title>Farewatch — BUD–MAD</title>
   <style>
     :root {
-      --bg: #0f1419;
-      --card: #1a222c;
-      --line: #2b3642;
-      --text: #e8eef4;
-      --muted: #93a4b5;
-      --ok: #3dd68c;
-      --partial: #f5c542;
-      --err: #ff6b6b;
-      --miss: #5c6b7a;
-      --accent: #6cb6ff;
+      --bg: #0f1419; --card: #1a222c; --line: #2b3642; --text: #e8eef4;
+      --muted: #93a4b5; --ok: #3dd68c; --partial: #f5c542; --err: #ff6b6b;
+      --miss: #5c6b7a; --accent: #6cb6ff; --today: #ff8c42; --min: #3dd68c;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: "Segoe UI", system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.45;
-    }
-    main { max-width: 1080px; margin: 0 auto; padding: 28px 20px 64px; }
-    h1 { font-size: 1.6rem; margin: 0 0 6px; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.45; }
+    main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 64px; }
+    h1 { font-size: 1.6rem; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+    h1 svg { flex-shrink: 0; }
     h2 { font-size: 1.15rem; margin: 32px 0 12px; }
     .sub { color: var(--muted); margin-bottom: 24px; }
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 14px 16px;
-    }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
     .card[title], .day[title] { cursor: help; }
     .card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: .04em; }
     .card .value { font-size: 1.45rem; font-weight: 650; margin-top: 4px; }
     .cal { display: flex; flex-wrap: wrap; gap: 6px; }
-    .day {
-      min-width: 58px; height: 44px; border-radius: 8px; padding: 0 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.78rem; color: #0b1014; font-weight: 650; font-variant-numeric: tabular-nums;
-    }
+    .day { min-width: 58px; height: 44px; border-radius: 8px; padding: 0 6px; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; color: #0b1014; font-weight: 650; font-variant-numeric: tabular-nums; }
     .day.ok { background: var(--ok); }
     .day.partial { background: var(--partial); }
     .day.error { background: var(--err); }
@@ -66,23 +45,37 @@ TEMPLATE = """<!DOCTYPE html>
     th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
     th { color: var(--muted); font-weight: 600; }
     .empty { color: var(--muted); }
-    svg { width: 100%; height: 200px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+    svg.chart { width: 100%; height: auto; aspect-ratio: 1000 / 280; background: var(--card); border: 1px solid var(--line); border-radius: 12px; display: block; }
     .hint { color: var(--muted); font-size: 0.85rem; }
+    .about { margin: 0 0 22px; }
+    .about p { margin: 0 0 10px; }
+    .about p:last-child { margin-bottom: 0; }
+    .schema { font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; overflow-x: auto; white-space: pre; color: #c5d4e0; }
   </style>
 </head>
 <body>
 <main>
-  <h1>BUD → MAD jegyárak</h1>
+  <h1>
+    <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
+      <path fill="#6cb6ff" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+    </svg>
+    BUD → MAD jegyárak
+  </h1>
   <p class="sub">Utolsó frissítés: <span id="generated"></span></p>
+  <div class="card about">
+    <p>Hobbi archívum: a Google Flights-on <strong>nem lehet visszamenőleg</strong> megnézni, mennyibe került tegnap egy jegy, ezért minden nap lementjük a BUD→MAD közvetlen economy árakat.</p>
+    <p><strong>Horizont</strong> = a gyűjtés napjától számított következő <span id="horizon-days">180</span> indulási nap, egyenként egy kereséssel (egyirányú, 1 felnőtt, HUF, basic). Nem „a 180 nap legolcsóbbja”, hanem 180 külön pillanatfelvétel.</p>
+    <p><strong>Kitűzött út</strong> = mindig ugyanaz az oda-vissza csomag (2027. márc. 12. BUD→MAD + márc. 15. MAD→BUD). Az RT ár egy csomag, nem két egyirányú összege.</p>
+  </div>
   <div class="kpis" id="kpis"></div>
 
   <h2>Gyűjtési napok</h2>
-  <p class="hint">Egy doboz = egy naptári nap, amikor a gyűjtő futott (vagy ki kellett volna futnia az első nap óta). A hónap–nap a dobozon van; a hover a keresések bontását mutatja.</p>
+  <p class="hint">Egy doboz = egy naptári nap a gyűjtő futásával. Hover: keresések bontása.</p>
   <div class="legend">
-    <span title="Az aznapi összes keresés sikerült vagy üres (nincs járat), hiba nélkül."><i class="sw" style="background:var(--ok)"></i>rendben</span>
-    <span title="Ugyanazon a napon volt sikeres ÉS hibás keresés is. A hibásak újrafuttatáskor újrapróbálódnak."><i class="sw" style="background:var(--partial)"></i>részleges</span>
-    <span title="Az aznapi keresések elhasaltak, siker nélkül."><i class="sw" style="background:var(--err)"></i>hiba</span>
-    <span title="Az első gyűjtés óta ez a naptári nap kimaradt (nem futott a script)."><i class="sw" style="background:var(--miss)"></i>hiányzik</span>
+    <span title="Az aznapi összes keresés sikerült vagy üres, hiba nélkül."><i class="sw" style="background:var(--ok)"></i>rendben</span>
+    <span title="Ugyanazon a napon volt sikeres ÉS hibás keresés is."><i class="sw" style="background:var(--partial)"></i>részleges</span>
+    <span title="Aznap nem volt sikeres keresés."><i class="sw" style="background:var(--err)"></i>hiba</span>
+    <span title="Az első gyűjtés óta ez a nap kimaradt."><i class="sw" style="background:var(--miss)"></i>hiányzik</span>
   </div>
   <div class="cal" id="calendar"></div>
 
@@ -90,75 +83,179 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="card" id="failures"></div>
 
   <h2>Kitűzött út — oda-vissza (RT), 2027. márc. 12–15.</h2>
-  <svg id="pinned" viewBox="0 0 1000 200" preserveAspectRatio="none"></svg>
+  <svg id="pinned" class="chart" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
   <p class="hint" id="pinned-caption"></p>
 
-  <h2>Legutóbbi horizont — egyirányú (OW) napi minimum</h2>
-  <svg id="horizon" viewBox="0 0 1000 200" preserveAspectRatio="none"></svg>
-  <p class="hint">OW = one-way, egyirányú jegy. A görbe a mai gyűjtés 180 indulási napjának minimumát mutatja. Hover: dátum, hány nap múlva, ár.</p>
+  <h2>Horizont — egyirányú (OW) napi minimum</h2>
+  <svg id="horizon" class="chart" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
+  <p class="hint">A vízszintes tengely a 180 napos horizont (indulásig hátralévő napok). Halvány kék: nyers min. Kék: 7 napos simított görbe. Zöld szaggatott: a horizont minimuma. Narancs pötty: a mai indulási nap (ha van adat).</p>
+
+  <h2>Légitársaságok a horizonton</h2>
+  <svg id="airlines" class="chart" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="legend" id="airline-legend"></div>
+  <div class="card" id="airline-wins"></div>
+
+  <h2>Legolcsóbb közelgő járatok</h2>
+  <div class="card" id="flights"></div>
+
+  <h2>Adatszerkezet</h2>
+  <div class="card">
+    <p class="hint">A kanonikus tároló SQLite (<code>data/fares.sqlite3</code>), nem CSV: egy kereséshez több ajánlat tartozik, a hibás napok újrapróbálhatók, és belőle bármikor készül CSV. Export: <code>python -m farewatch analyze</code> → <code>data/reports/</code>.</p>
+    <pre class="schema">snapshots  = egy keresés (dátum, OW/RT, status, forrás)
+offers     = a keresés találatai (légitársaság, idő, ár)
+           1 snapshot → N offer</pre>
+  </div>
 </main>
 <script type="application/json" id="payload">__PAYLOAD__</script>
 <script>
 const data = JSON.parse(document.getElementById("payload").textContent);
 const $ = (id) => document.getElementById(id);
 $("generated").textContent = data.generated_at || "—";
+$("horizon-days").textContent = data.horizon_days || 180;
+const COLORS = {"Wizz Air":"#c50e7a","Ryanair":"#f1c40f","Iberia":"#e74c3c"};
+const HORIZON = data.horizon_days || 180;
 
 function kpi(label, value, title) {
-  const t = title ? ` title="${title.replaceAll('"', '&quot;')}"` : "";
+  const t = title ? ` title="${title.replaceAll('"','&quot;')}"` : "";
   return `<div class="card"${t}><div class="label">${label}</div><div class="value">${value}</div></div>`;
 }
 const last = data.last_run || {};
-const pinnedTitle = last.pinned_hover || "A 2027-03-12 oda / 03-15 vissza csomag legolcsóbb ára az utolsó gyűjtésből. RT = round-trip, oda-vissza; nem két egyirányú összege.";
 $("kpis").innerHTML = [
   kpi("Utolsó futás", last.collected_on || "nincs", last.run_hover || ""),
-  kpi("Sikeres", last.ok ?? "—", last.ok_hover || "Hány keresés tért vissza árral aznap."),
-  kpi("Hiba", last.error ?? "—", last.error_hover || "Hány keresés hasalt el (hálózat, Google, parser)."),
+  kpi("Sikeres", last.ok ?? "—", last.ok_hover || ""),
+  kpi("Hiba", last.error ?? "—", last.error_hover || ""),
   kpi("Üres / nincs járat", last.empty ?? "—", "A keresés lefutott, de azon a napon nincs közvetlen járat."),
-  kpi("Kitűzött RT min", last.pinned_min != null ? Math.round(last.pinned_min).toLocaleString("hu-HU") + " Ft" : "—", pinnedTitle),
+  kpi("Kitűzött RT min", last.pinned_min != null ? Math.round(last.pinned_min).toLocaleString("hu-HU") + " Ft" : "—", last.pinned_hover || ""),
 ].join("");
 
-$("calendar").innerHTML = (data.days || []).map(d => {
-  const cls = d.kind;
-  const title = d.hover || d.date;
-  const label = d.date.slice(5);
-  return `<div class="day ${cls}" title="${title.replaceAll('"', '&quot;')}">${label}</div>`;
-}).join("") || `<p class="empty">Még nincs gyűjtött nap.</p>`;
+$("calendar").innerHTML = (data.days || []).map(d =>
+  `<div class="day ${d.kind}" title="${(d.hover||d.date).replaceAll('"','&quot;')}">${d.date.slice(5)}</div>`
+).join("") || `<p class="empty">Még nincs gyűjtött nap.</p>`;
 
 const fails = data.failures || [];
 $("failures").innerHTML = fails.length
   ? `<table><thead><tr><th>Gyűjtés</th><th>Keresés</th><th>Hiba</th></tr></thead><tbody>${
-      fails.map(f => `<tr><td>${f.collected_on}</td><td>${f.trip_type === "RT" ? "oda-vissza (RT)" : "egyirányú (OW)"} ${f.origin}–${f.dest} ${f.outbound_date}${f.return_date ? " / "+f.return_date : ""}</td><td>${f.error || "—"}</td></tr>`).join("")
+      fails.map(f => `<tr><td>${f.collected_on}</td><td>${f.trip_type==="RT"?"oda-vissza (RT)":"egyirányú (OW)"} ${f.origin}–${f.dest} ${f.outbound_date}${f.return_date?" / "+f.return_date:""}</td><td>${f.error||"—"}</td></tr>`).join("")
     }</tbody></table>`
   : `<p class="empty">Nincs rögzített hiba.</p>`;
 
+function yRange(ys) {
+  const min = Math.min(...ys), max = Math.max(...ys);
+  return { min, max, span: (max - min) || 1 };
+}
+function movingAvg(series, window=7) {
+  return series.map((_, i) => {
+    const a = Math.max(0, i - Math.floor(window/2));
+    const b = Math.min(series.length, a + window);
+    const slice = series.slice(a, b);
+    return slice.reduce((s,p)=>s+p.y,0) / slice.length;
+  });
+}
+function axisXDays(H, xOf, h, padB) {
+  let ticks = "";
+  for (let d = 0; d <= H; d += 30) {
+    const x = xOf(d);
+    ticks += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${h-padB}" y2="${h-padB+6}" stroke="#5c6b7a"></line>
+      <text x="${x.toFixed(1)}" y="${h-14}" text-anchor="middle" fill="#93a4b5" font-size="12">${d} nap</text>`;
+  }
+  return ticks + `<text x="500" y="${h-2}" text-anchor="middle" fill="#93a4b5" font-size="11">indulásig hátralévő napok (horizont: ${H} nap)</text>`;
+}
 function spark(id, series, yLabel) {
   const svg = $(id);
-  if (!series.length) {
-    svg.innerHTML = `<text x="20" y="100" fill="#93a4b5">Még nincs elég adat.</text>`;
-    return;
-  }
-  const ys = series.map(p => p.y);
-  const min = Math.min(...ys), max = Math.max(...ys);
-  const span = (max - min) || 1;
-  const w = 1000, h = 200, pad = 28;
+  if (!series.length) { svg.innerHTML = `<text x="20" y="140" fill="#93a4b5">Még nincs elég adat.</text>`; return; }
+  const { min, max, span } = yRange(series.map(p => p.y));
+  const w = 1000, h = 280, padL = 28, padR = 24, padT = 36, padB = 48;
   const pts = series.map((pt, i) => {
-    const x = pad + (i / Math.max(series.length - 1, 1)) * (w - 2 * pad);
-    const y = h - pad - ((pt.y - min) / span) * (h - 2 * pad);
-    return { x, y, label: pt.label || `${pt.x}: ${Math.round(pt.y)} Ft` };
+    const x = padL + (i / Math.max(series.length - 1, 1)) * (w - padL - padR);
+    const y = h - padB - ((pt.y - min) / span) * (h - padT - padB);
+    return { ...pt, px: x, py: y };
   });
-  const line = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const raw = pts.map(p => `${p.px.toFixed(1)},${p.py.toFixed(1)}`).join(" ");
   const dots = pts.map(p =>
-    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="#6cb6ff"><title>${p.label.replaceAll("<", "")}</title></circle>`
+    `<circle cx="${p.px.toFixed(1)}" cy="${p.py.toFixed(1)}" r="5" fill="#6cb6ff"><title>${(p.label||"").replaceAll("<","")}</title></circle>`
   ).join("");
-  svg.innerHTML = `<polyline fill="none" stroke="#6cb6ff" stroke-width="3" points="${line}"></polyline>
+  svg.innerHTML = `<polyline fill="none" stroke="#6cb6ff" stroke-width="3" points="${raw}"></polyline>
     ${dots}
     <text x="20" y="22" fill="#93a4b5" font-size="14">${yLabel}: ${Math.round(min).toLocaleString("hu-HU")} – ${Math.round(max).toLocaleString("hu-HU")} Ft</text>`;
 }
+function sparkHorizon(id, series, yLabel, opts={}) {
+  const svg = $(id);
+  if (!series.length) { svg.innerHTML = `<text x="20" y="140" fill="#93a4b5">Még nincs elég adat.</text>`; return; }
+  const { min, max, span } = yRange(series.map(p => p.y));
+  const w = 1000, h = 280, padL = 36, padR = 28, padT = 36, padB = 48;
+  const xOf = (days) => padL + (Math.max(0, Math.min(HORIZON, days)) / HORIZON) * (w - padL - padR);
+  const yOf = (val) => h - padB - ((val - min) / span) * (h - padT - padB);
+  const pts = series.map(pt => ({ ...pt, px: xOf(pt.days ?? 0), py: yOf(pt.y) }));
+  const raw = pts.map(p => `${p.px.toFixed(1)},${p.py.toFixed(1)}`).join(" ");
+  let extra = axisXDays(HORIZON, xOf, h, padB);
+  extra += `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="#2b3642"></line>`;
+  if (opts.smooth) {
+    const avg = movingAvg(series, 7);
+    const sm = pts.map((p,i) => `${p.px.toFixed(1)},${yOf(avg[i]).toFixed(1)}`).join(" ");
+    extra += `<polyline fill="none" stroke="#6cb6ff" stroke-width="3" points="${sm}"></polyline>`;
+  }
+  if (opts.minLine) {
+    const y = yOf(min);
+    extra += `<line x1="${padL}" x2="${w-padR}" y1="${y}" y2="${y}" stroke="#3dd68c" stroke-dasharray="6 5" stroke-width="1.5"></line>
+      <text x="${w-padR-8}" y="${y-6}" text-anchor="end" fill="#3dd68c" font-size="12">min ${Math.round(min).toLocaleString("hu-HU")} Ft</text>`;
+  }
+  const dots = pts.map(p => {
+    const today = p.is_today;
+    const isMin = p.is_min;
+    const fill = today ? "#ff8c42" : (isMin ? "#3dd68c" : "#6cb6ff");
+    const r = today || isMin ? 6.5 : 3.2;
+    return `<circle cx="${p.px.toFixed(1)}" cy="${p.py.toFixed(1)}" r="${r}" fill="${fill}"><title>${(p.label||"").replaceAll("<","")}</title></circle>`;
+  }).join("");
+  const rawOp = opts.smooth ? "0.35" : "1";
+  svg.innerHTML = `<polyline fill="none" stroke="#6cb6ff" stroke-width="2" stroke-opacity="${rawOp}" points="${raw}"></polyline>
+    ${extra}${dots}
+    <text x="20" y="22" fill="#93a4b5" font-size="14">${yLabel}: ${Math.round(min).toLocaleString("hu-HU")} – ${Math.round(max).toLocaleString("hu-HU")} Ft</text>`;
+}
 spark("pinned", data.pinned_series || [], "Oda-vissza (RT) csomagár");
-spark("horizon", data.horizon_series || [], "Egyirányú (OW) min");
+sparkHorizon("horizon", data.horizon_series || [], "Egyirányú (OW) min", { smooth: true, minLine: true });
 $("pinned-caption").textContent = (data.pinned_series || []).length
-  ? "RT = round-trip: egy oda-vissza csomag ára (2027-03-12 BUD→MAD + 03-15 MAD→BUD). Hover a ponton: melyik napon mértük. Nem két egyirányú összege."
+  ? "RT = round-trip: oda-vissza csomag (2027-03-12 + 03-15). Hover: melyik napon mértük."
   : "";
+
+const air = data.airline_series || {};
+const names = Object.keys(air);
+if (names.length) {
+  const all = names.flatMap(n => air[n].map(p => p.y));
+  const { min, max, span } = yRange(all);
+  const w = 1000, h = 280, padL = 36, padR = 28, padT = 36, padB = 48;
+  const xOf = (days) => padL + (Math.max(0, Math.min(HORIZON, days)) / HORIZON) * (w - padL - padR);
+  const yOf = (val) => h - padB - ((val-min)/span)*(h-padT-padB);
+  let svg = `<text x="20" y="22" fill="#93a4b5" font-size="14">Légitársaságonkénti napi minimum a 180 napos horizonton</text>`;
+  svg += `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="#2b3642"></line>`;
+  svg += axisXDays(HORIZON, xOf, h, padB);
+  names.forEach(n => {
+    const series = air[n];
+    if (!series.length) return;
+    const col = COLORS[n] || "#6cb6ff";
+    const pts = series.map(p => `${xOf(p.days ?? 0).toFixed(1)},${yOf(p.y).toFixed(1)}`).join(" ");
+    svg += `<polyline fill="none" stroke="${col}" stroke-width="2.4" points="${pts}"></polyline>`;
+  });
+  $("airlines").innerHTML = svg;
+  $("airline-legend").innerHTML = names.map(n =>
+    `<span><i class="sw" style="background:${COLORS[n]||"#6cb6ff"}"></i>${n}</span>`
+  ).join("");
+} else {
+  $("airlines").innerHTML = `<text x="20" y="140" fill="#93a4b5">Még nincs légitársaság-adat.</text>`;
+}
+
+const wins = data.airline_wins || [];
+$("airline-wins").innerHTML = wins.length
+  ? `<table><thead><tr><th>Légitársaság</th><th>Hányszor a legolcsóbb</th><th>Arány</th><th>Saját medián</th></tr></thead><tbody>${
+      wins.map(w => `<tr><td>${w.airline}</td><td>${w.wins}</td><td>${w.share}</td><td>${w.median}</td></tr>`).join("")
+    }</tbody></table>`
+  : `<p class="empty">Nincs elég adat a légitársaság-összehasonlításhoz.</p>`;
+
+const flights = data.cheapest_flights || [];
+$("flights").innerHTML = flights.length
+  ? `<table><thead><tr><th>Indulás</th><th>Nap múlva</th><th>Légitársaság</th><th>Járat / idő</th><th>Időtartam</th><th>Ár</th></tr></thead><tbody>${
+      flights.map(f => `<tr><td>${f.date}</td><td>${f.days}</td><td>${f.airline}${f.code?" ("+f.code+")":""}</td><td>${f.flight}</td><td>${f.duration}</td><td>${f.price}</td></tr>`).join("")
+    }</tbody></table>`
+  : `<p class="empty">Nincs járatlista.</p>`;
 </script>
 </body>
 </html>
@@ -179,6 +276,33 @@ def _job_label(row: Any) -> str:
     trip = "oda-vissza (RT)" if row["trip_type"] == "RT" else "egyirányú (OW)"
     ret = f" / {row['return_date']}" if row["return_date"] else ""
     return f"{trip} {row['origin']}–{row['dest']} {row['outbound_date']}{ret}"
+
+
+def _ft(amount: float) -> str:
+    return f"{amount:,.0f} Ft".replace(",", " ")
+
+
+def _hhmm(value: str | None) -> str:
+    if not value or "T" not in value:
+        return "—"
+    return value.split("T", 1)[1][:5]
+
+
+def _duration(minutes: int | None) -> str:
+    if not minutes:
+        return "—"
+    hours, mins = divmod(int(minutes), 60)
+    return f"{hours}ó {mins:02d}p"
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if not ordered:
+        return 0.0
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
 
 
 def _resolve_source(conn, settings: Settings) -> str:
@@ -343,18 +467,20 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
             {
                 "x": row["collected_on"],
                 "y": price,
-                "label": (
-                    f"{row['collected_on']} · oda-vissza (RT) csomagár "
-                    f"{price:,.0f} Ft".replace(",", " ")
-                ),
+                "label": f"{row['collected_on']} · oda-vissza (RT) {_ft(price)}",
             }
         )
-    horizon_series = []
+
+    horizon_series: list[dict[str, Any]] = []
+    airline_series: dict[str, list[dict[str, Any]]] = {}
+    airline_wins: list[dict[str, Any]] = []
+    cheapest_flights: list[dict[str, Any]] = []
     if last_date:
         collected = date.fromisoformat(last_date)
-        for row in conn.execute(
+        offer_rows = conn.execute(
             """
-            SELECT s.outbound_date, MIN(o.price_amount) AS min_price
+            SELECT s.outbound_date, o.airline, o.airline_code, o.departure_at,
+                   o.arrival_at, o.price_amount, o.duration_minutes, o.outbound_flights
             FROM snapshots s
             JOIN offers o ON o.snapshot_id = s.id
             WHERE s.trip_type = 'OW'
@@ -363,33 +489,108 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
               AND s.status = 'ok'
               AND s.collected_on = ?
               AND s.source = ?
-            GROUP BY s.outbound_date
-            ORDER BY s.outbound_date
+            ORDER BY s.outbound_date, o.price_amount
             """,
             (settings.origin, settings.dest, last_date, source),
-        ):
-            outbound = date.fromisoformat(row["outbound_date"])
-            days_left = (outbound - collected).days
-            price = float(row["min_price"])
+        ).fetchall()
+        by_date: dict[str, list[Any]] = {}
+        by_airline: dict[str, dict[str, float]] = {}
+        for row in offer_rows:
+            by_date.setdefault(row["outbound_date"], []).append(row)
+            name = row["airline"] or "ismeretlen"
+            prices = by_airline.setdefault(name, {})
+            key = row["outbound_date"]
+            amount = float(row["price_amount"])
+            prices[key] = amount if key not in prices else min(prices[key], amount)
+
+        min_price = None
+        for outbound, rows in by_date.items():
+            best = rows[0]
+            price = float(best["price_amount"])
+            if min_price is None or price < min_price:
+                min_price = price
+            days_left = (date.fromisoformat(outbound) - collected).days
             horizon_series.append(
                 {
-                    "x": row["outbound_date"],
+                    "x": outbound,
                     "y": price,
                     "days": days_left,
+                    "is_today": outbound == today.isoformat(),
+                    "is_min": False,
+                    "airline": best["airline"],
                     "label": (
-                        f"{row['outbound_date']} · {days_left} nap múlva · "
-                        f"{price:,.0f} Ft".replace(",", " ")
+                        f"{outbound} · {days_left} nap múlva · {_ft(price)} · "
+                        f"{best['airline'] or ''} {_hhmm(best['departure_at'])}"
                     ),
                 }
             )
+        if min_price is not None:
+            for point in horizon_series:
+                point["is_min"] = abs(point["y"] - min_price) < 0.5
+
+        for name, prices in sorted(by_airline.items()):
+            airline_series[name] = [
+                {
+                    "x": day,
+                    "y": amount,
+                    "days": (date.fromisoformat(day) - collected).days,
+                    "label": f"{name} · {day} · {_ft(amount)}",
+                }
+                for day, amount in sorted(prices.items())
+            ]
+
+        wins: dict[str, int] = {}
+        all_prices: dict[str, list[float]] = {}
+        for rows in by_date.values():
+            winner = rows[0]["airline"] or "ismeretlen"
+            wins[winner] = wins.get(winner, 0) + 1
+        for name, prices in by_airline.items():
+            all_prices[name] = list(prices.values())
+        total_days = sum(wins.values()) or 1
+        airline_wins = [
+            {
+                "airline": name,
+                "wins": count,
+                "share": f"{100 * count / total_days:.0f}%",
+                "median": _ft(_median(all_prices.get(name, []))),
+            }
+            for name, count in sorted(wins.items(), key=lambda item: -item[1])
+        ]
+
+        ranked = []
+        for outbound, rows in by_date.items():
+            best = rows[0]
+            ranked.append((float(best["price_amount"]), outbound, best))
+        ranked.sort(key=lambda item: (item[0], item[1]))
+        for price, outbound, best in ranked[:12]:
+            days_left = (date.fromisoformat(outbound) - collected).days
+            cheapest_flights.append(
+                {
+                    "date": outbound,
+                    "days": days_left,
+                    "airline": best["airline"] or "—",
+                    "code": best["airline_code"] or "",
+                    "flight": (
+                        f"{best['outbound_flights'] or 'közvetlen'} "
+                        f"{_hhmm(best['departure_at'])}–{_hhmm(best['arrival_at'])}"
+                    ).strip(),
+                    "duration": _duration(best["duration_minutes"]),
+                    "price": _ft(price),
+                }
+            )
+
     return {
         "generated_at": generated,
         "source": source,
+        "horizon_days": settings.horizon_days,
         "last_run": last_run,
         "days": days,
         "failures": failures,
         "pinned_series": pinned_series,
         "horizon_series": horizon_series,
+        "airline_series": airline_series,
+        "airline_wins": airline_wins,
+        "cheapest_flights": cheapest_flights,
     }
 
 
@@ -399,11 +600,15 @@ def write_dashboard(settings: Settings, today: date | None = None) -> Path:
     if not settings.db_path.exists():
         payload: dict[str, Any] = {
             "generated_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M"),
+            "horizon_days": settings.horizon_days,
             "last_run": {},
             "days": [],
             "failures": [],
             "pinned_series": [],
             "horizon_series": [],
+            "airline_series": {},
+            "airline_wins": [],
+            "cheapest_flights": [],
         }
     else:
         conn = connect(settings.db_path)

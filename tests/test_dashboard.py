@@ -25,4 +25,6 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
     assert "oda-vissza (RT)" in html or "oda-vissza" in html
     assert '"date": "2026-08-21"' in html
     assert '"date": "2026-07-22"' not in html
+    assert "Hobbi archívum" in html
+    assert "Adatszerkezet" in html
     assert (tmp_path / "docs" / ".nojekyll").exists()

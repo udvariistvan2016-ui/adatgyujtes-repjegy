@@ -7,17 +7,50 @@ if (-not (Test-Path $Python)) {
     throw "Eloszor hozz letre a .venv-et: python -m venv .venv"
 }
 
-$TaskName = "Farewatch-BUD-MAD"
 $CollectScript = Join-Path $Root "scripts\collect.ps1"
 $BackupScript = Join-Path $Root "scripts\backup-db.ps1"
-$CollectAction = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$CollectScript`""
-$BackupAction = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$BackupScript`""
+$CollectArg = "-NoProfile -ExecutionPolicy Bypass -File `"$CollectScript`""
+$BackupArg = "-NoProfile -ExecutionPolicy Bypass -File `"$BackupScript`""
 
-schtasks /Create /TN $TaskName /SC DAILY /ST 06:00 /TR $CollectAction /F
-if ($LASTEXITCODE -ne 0) { throw "Nem sikerult a gyujto feladatot letrehozni" }
+$Settings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
+    -MultipleInstances IgnoreNew
 
-schtasks /Create /TN "$TaskName-backup" /SC DAILY /ST 06:40 /TR $BackupAction /F
-if ($LASTEXITCODE -ne 0) { throw "Nem sikerult a backup feladatot letrehozni" }
+$Principal = New-ScheduledTaskPrincipal `
+    -UserId $env:USERNAME `
+    -LogonType Interactive `
+    -RunLevel Limited
 
-Write-Host "Kesz: napi 06:00 collect, 06:40 backup."
-Write-Host "Ellenorzes: schtasks /Query /TN $TaskName /V /FO LIST"
+function Install-DailyTask {
+    param(
+        [string]$Name,
+        [string]$Argument,
+        [datetime]$At
+    )
+    $Action = New-ScheduledTaskAction `
+        -Execute "powershell.exe" `
+        -Argument $Argument `
+        -WorkingDirectory $Root
+    $Trigger = New-ScheduledTaskTrigger -Daily -At $At
+    Register-ScheduledTask `
+        -TaskName $Name `
+        -Action $Action `
+        -Trigger $Trigger `
+        -Settings $Settings `
+        -Principal $Principal `
+        -Force | Out-Null
+}
+
+Install-DailyTask -Name "Farewatch-BUD-MAD" -Argument $CollectArg -At ([datetime]"10:00")
+Install-DailyTask -Name "Farewatch-BUD-MAD-retry" -Argument $CollectArg -At ([datetime]"12:00")
+Install-DailyTask -Name "Farewatch-BUD-MAD-backup" -Argument $BackupArg -At ([datetime]"12:40")
+
+Write-Host "Kesz. Laptopon, bejelentkezve:"
+Write-Host "  10:00  Farewatch-BUD-MAD         gyujtes + dashboard + git push"
+Write-Host "  12:00  Farewatch-BUD-MAD-retry   hibas keresesek ujra, HTML + push"
+Write-Host "  12:40  Farewatch-BUD-MAD-backup  SQLite masolat"
+Write-Host "Ha 10:00-kor a gep meg ki van, bejelentkezes utan a StartWhenAvailable elinditja."
+Write-Host "Ellenorzes:  Get-ScheduledTask -TaskName 'Farewatch-*'"

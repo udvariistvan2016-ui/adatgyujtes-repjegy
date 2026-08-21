@@ -22,11 +22,12 @@ direct_only: true
 carry_on_bags: 0
 checked_bags: 0
 
-request_delay_seconds: 2.5
-request_jitter_seconds: 0.8
+# Udvarias ritmus: lassú + szórt szünet. A collect.ps1 3–18 perc random késleltetéssel indul.
+request_delay_seconds: 5.5
+request_jitter_seconds: 3.0
 max_retries: 3
 
-collect_hour: "06:00"
+collect_hour: "10:00"
 
 # Kitűzött oda-vissza: 2027-03-12 oda, 2027-03-15 vissza (péntek–hétfő).
 # collect_oneways: ugyanarra a két napra egyirányú snapshot is (csomag vs két jegy).

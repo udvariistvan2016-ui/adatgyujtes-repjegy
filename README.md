@@ -68,30 +68,53 @@ A `docs/index.html` statikus oldal: utolsó futás, gyűjtési naptár (siker / 
 python -m farewatch dashboard
 ```
 
-A napi `scripts\collect.ps1` a gyűjtés után újragenerálja, és ha van `git` remote, feltolja a Pages-re.
+A napi `scripts\collect.ps1` a gyűjtés előtt **3–18 perc véletlen késleltetést** tart (hogy ne 10:00-kor pontosan induljon), utána HTML + git push. Kézi, azonnali futás: `.\scripts\collect.ps1 -NoDelay`. Kérések között ~5.5–8.5 s szünet van.
 
 ## Tárolás
 
-- `data/fares.sqlite3` — snapshots + offers
+A kanonikus adat **SQLite**, nem napi CSV. Egy kereséshez több ajánlat tartozik, a hibás nap újrapróbálható (unique kulcs), és SQL-lel aggregálható. A CSV **export**, nem a forrás.
+
+- `data/fares.sqlite3` — két tábla: `snapshots` (egy keresés) + `offers` (a találatok)
 - `data/raw/` — nyers JSON keresésenként (parser-csere után újraolvasható)
-- `data/reports/` — CSV és ábrák (`analyze`)
+- `data/reports/` — CSV és ábrák (`python -m farewatch analyze`)
 - `data/backups/` — napi SQLite másolat, 14 napot tart
 
-OneDrive alatt a SQLite néha összeakad a szinkronnal. Ha hibát látsz, állítsd szünetre a `data/` mappát, vagy tedd a DB-t helyi lemezre.
+Belénézés:
 
-## Ütemezés
+```powershell
+python -m farewatch status
+python -m farewatch analyze
+```
 
-**Windows (laptop), napi 06:00:**
+A `analyze` a `data/reports/` alá írja a horizont és a kitűzött RT CSV-t. A teljes séma:
+
+```
+snapshots  egy keresés: collected_on, origin/dest, outbound_date, trip_type (OW|RT), status, source
+offers     a keresés találatai: airline, departure_at, price_amount, …  (N sor / snapshot)
+```
+
+GUI-hoz: [DB Browser for SQLite](https://sqlitebrowser.org/) — nyisd meg a `data/fares.sqlite3` fájlt. OneDrive alatt a SQLite néha összeakad a szinkronnal; ha hibát látsz, állítsd szünetre a `data/` mappát, vagy tedd a DB-t helyi lemezre.
+
+## Ütemezés (laptop, amíg nincs VPS)
+
+Napi **10:00** kezdet — akkor már be van kapcsolva a gép. A 12:00-es második futás csak a hibás kereséseket kéri újra (a sikerest kihagyja), majd újra HTML + git push.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-task.ps1
 ```
 
-Ez két Task Scheduler feladatot hoz létre: `Farewatch-BUD-MAD` (collect + dashboard + Pages feltöltés) és `Farewatch-BUD-MAD-backup`.
+Ez két Task Scheduler feladatot hoz létre, **a bejelentkezett felhasználóként** (kell a git push-hoz):
 
-Kézi futtatás: `.\scripts\collect.ps1`
+- `Farewatch-BUD-MAD` — 10:00: collect → dashboard → `docs/` commit + push
+- `Farewatch-BUD-MAD-retry` — 12:00: ugyanaz; a sikerest kihagyja, a hibásat újra kéri
+- `Farewatch-BUD-MAD-backup` — 12:40: SQLite másolat
 
-**VPS:** lásd [`scripts/crontab.example`](scripts/crontab.example). Másold a projektet, hozd létre a `.venv`-et, a crontabban cseréld a `/path/to/...` részt, és tedd futtathatóvá a `scripts/*.sh` fájlokat.
+Ha 10:00-kor a laptop még alszik / ki van kapcsolva, a `StartWhenAvailable` bekapcsoláskor (bejelentkezés után) elindítja. Alvásból ébresztést a Windows nem mindig tud; a biztos út: 10-re már nyitva legyen a gép, te bejelentkezve.
+
+Kézi futtatás: `.\scripts\collect.ps1`  
+Log: `data\collect.log`
+
+**VPS** (később): lásd [`scripts/crontab.example`](scripts/crontab.example). Ugyanaz a `collect.sh` (gyűjtés + dashboard + push).
 
 ```bash
 chmod +x scripts/collect.sh scripts/backup-db.sh

@@ -1,13 +1,17 @@
-# VPS / Linux: másold a projektet, hozd létre a .venv-et, majd:
-#   crontab -e
-# A PATH-ot igazítsd a szerverhez. A gyűjtés ~15–40 perc lehet (180 dátum).
+# VPS / Linux (később). Laptopon Task Scheduler van, lásd install-windows-task.ps1.
+# Másold a projektet, hozd létre a .venv-et, chmod +x scripts/*.sh, majd crontab -e.
+# A PATH-ot igazítsd a szerverhez. A gyűjtés ~15–40 perc (180 dátum).
 
 SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 MAILTO=""
 
-# Napi gyűjtés 06:00 Europe/Budapest — ha a VPS UTC-n van, ez 04:00 UTC (téli idő).
-0 4 * * * /path/to/adatgyujtes-repjegy/scripts/collect.sh >> /path/to/adatgyujtes-repjegy/data/collect.log 2>&1
+# 10:00 Europe/Budapest = 08:00 UTC télen, 08:00 CEST = 06:00 UTC nyáron.
+# Itt téli idő (UTC+1) van feltételezve: 08:00 UTC.
+0 8 * * * /path/to/adatgyujtes-repjegy/scripts/collect.sh >> /path/to/adatgyujtes-repjegy/data/collect.log 2>&1
 
-# SQLite backup 06:40 (04:40 UTC), az utolsó 14 napot tartja
-40 4 * * * /path/to/adatgyujtes-repjegy/scripts/backup-db.sh >> /path/to/adatgyujtes-repjegy/data/backup.log 2>&1
+# 12:00 újrapróba (csak hibás keresések) — 10:00 UTC télen
+0 10 * * * /path/to/adatgyujtes-repjegy/scripts/collect.sh >> /path/to/adatgyujtes-repjegy/data/collect.log 2>&1
+
+# SQLite backup 12:40
+40 10 * * * /path/to/adatgyujtes-repjegy/scripts/backup-db.sh >> /path/to/adatgyujtes-repjegy/data/backup.log 2>&1
