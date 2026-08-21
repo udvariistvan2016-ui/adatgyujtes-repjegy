@@ -22,4 +22,7 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
     assert "BUD" in html
     assert "2027-03-12" in html or "márc" in html
     assert '"kind": "ok"' in html or '"kind":"ok"' in html
+    assert "oda-vissza (RT)" in html or "oda-vissza" in html
+    assert '"date": "2026-08-21"' in html
+    assert '"date": "2026-07-22"' not in html
     assert (tmp_path / "docs" / ".nojekyll").exists()
