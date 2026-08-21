@@ -1,0 +1,13 @@
+# VPS / Linux: másold a projektet, hozd létre a .venv-et, majd:
+#   crontab -e
+# A PATH-ot igazítsd a szerverhez. A gyűjtés ~15–40 perc lehet (180 dátum).
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+MAILTO=""
+
+# Napi gyűjtés 06:00 Europe/Budapest — ha a VPS UTC-n van, ez 04:00 UTC (téli idő).
+0 4 * * * /path/to/adatgyujtes-repjegy/scripts/collect.sh >> /path/to/adatgyujtes-repjegy/data/collect.log 2>&1
+
+# SQLite backup 06:40 (04:40 UTC), az utolsó 14 napot tartja
+40 4 * * * /path/to/adatgyujtes-repjegy/scripts/backup-db.sh >> /path/to/adatgyujtes-repjegy/data/backup.log 2>&1

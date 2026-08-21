@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "farewatch"
+version = "0.1.0"
+description = "Napi BUD–MAD jegyár-gyűjtő hobbi projekthez"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fast-flights>=3.1.0",
+    "pyyaml>=6.0",
+    "matplotlib>=3.8",
+    "tzdata>=2024.1",
+    "typing_extensions>=4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+farewatch = "farewatch.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

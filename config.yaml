@@ -1,0 +1,38 @@
+# BUD–MAD jegyár-gyűjtő — rögzített scope
+#
+# Forrás: Google Flights a fast-flights könyvtáron keresztül.
+# Hivatalos hobbi-API 2026-ban nincs (Amadeus Self-Service leállt, Kiwi/Skyscanner partner).
+# Egy aggregátor kell, mert a BUD–MAD legolcsóbb jegy gyakran Wizz/Ryanair.
+# Adapter interfész: a source mező később cserélhető (pl. fizetős wrapper).
+
+source: google_flights   # google_flights | mock
+
+origin: BUD
+dest: MAD
+horizon_days: 180
+cabin: economy
+adults: 1
+currency: HUF            # HUF a magyar kereséshez; EUR-ra cserélhető
+language: hu
+timezone: Europe/Budapest
+direct_only: true
+
+# Megjelenő legolcsóbb ár (LCC-nél jellemzően ülés poggyász nélkül).
+# Ne állítsd 1-re, ha az idősor a basic tarifát követi.
+carry_on_bags: 0
+checked_bags: 0
+
+request_delay_seconds: 2.5
+request_jitter_seconds: 0.8
+max_retries: 3
+
+collect_hour: "06:00"
+
+# Kitűzött oda-vissza: 2027-03-12 oda, 2027-03-15 vissza (péntek–hétfő).
+# collect_oneways: ugyanarra a két napra egyirányú snapshot is (csomag vs két jegy).
+pinned_trips:
+  - origin: BUD
+    dest: MAD
+    outbound_date: "2027-03-12"
+    return_date: "2027-03-15"
+    collect_oneways: true
