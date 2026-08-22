@@ -31,6 +31,7 @@ def test_mock_collect_and_idempotent(tmp_path):
     assert first.planned == 3
     assert first.ok == 3
     assert first.skipped == 0
+    assert first.duration_seconds >= 0
     raw_files = list((tmp_path / "raw").glob("*.json"))
     assert len(raw_files) == 3
 
@@ -55,12 +56,17 @@ def test_mock_collect_and_idempotent(tmp_path):
     conn = connect(settings.db_path)
     try:
         info = status_rows(conn)
+        runs = conn.execute(
+            "SELECT COUNT(*) AS n, MAX(duration_seconds) AS sec FROM collect_runs"
+        ).fetchone()
     finally:
         conn.close()
     assert info["snapshots"] == 3
     assert info["offers"] == 9
     assert info["pinned_recent"]
     assert info["pinned_recent"][0]["min_price"] is not None
+    assert runs["n"] == 3
+    assert runs["sec"] is not None
 
 
 def test_retries_error_snapshots_without_force(tmp_path):

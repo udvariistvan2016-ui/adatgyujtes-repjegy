@@ -10,7 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from farewatch.config import Settings
-from farewatch.db import connect, existing_snapshot, save_result
+from farewatch.db import connect, existing_snapshot, save_collect_run, save_result
 from farewatch.jobs import build_jobs
 from farewatch.models import SearchRequest, SearchResult
 from farewatch.sources.factory import get_adapter
@@ -25,6 +25,7 @@ class CollectSummary:
     ok: int = 0
     empty: int = 0
     error: int = 0
+    duration_seconds: float = 0.0
 
 
 def today_in_tz(timezone_name: str) -> date:
@@ -115,6 +116,8 @@ def collect(
             )
         return summary
 
+    started_at = datetime.now().astimezone()
+    started_mono = time.perf_counter()
     conn = connect(settings.db_path)
     try:
         for index, request in enumerate(jobs):
@@ -154,6 +157,29 @@ def collect(
             )
             if index + 1 < len(jobs):
                 _sleep(settings)
+        finished_at = datetime.now().astimezone()
+        summary.duration_seconds = time.perf_counter() - started_mono
+        save_collect_run(
+            conn,
+            collected_on=today,
+            source=adapter.name,
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=summary.duration_seconds,
+            planned=summary.planned,
+            skipped=summary.skipped,
+            ok=summary.ok,
+            empty=summary.empty,
+            error=summary.error,
+        )
+        logger.info(
+            "Gyűjtés kész: %.1f perc (%s ok, %s hiba, %s üres, %s kihagyva)",
+            summary.duration_seconds / 60,
+            summary.ok,
+            summary.error,
+            summary.empty,
+            summary.skipped,
+        )
     finally:
         conn.close()
     return summary

@@ -101,9 +101,10 @@ TEMPLATE = r"""<!DOCTYPE html>
   <h2>Adatszerkezet</h2>
   <div class="card">
     <p class="hint">A kanonikus tároló SQLite (<code>data/fares.sqlite3</code>), nem CSV: egy kereséshez több ajánlat tartozik, a hibás napok újrapróbálhatók, és belőle bármikor készül CSV. Export: <code>python -m farewatch analyze</code> → <code>data/reports/</code>.</p>
-    <pre class="schema">snapshots  = egy keresés (dátum, OW/RT, status, forrás)
-offers     = a keresés találatai (légitársaság, idő, ár)
-           1 snapshot → N offer</pre>
+    <pre class="schema">snapshots     = egy keresés (dátum, OW/RT, status, forrás)
+offers        = a keresés találatai (légitársaság, idő, ár)
+collect_runs  = egy teljes gyűjtőfutás ideje (percben a KPI-n)
+              1 snapshot → N offer</pre>
   </div>
 </main>
 <script type="application/json" id="payload">__PAYLOAD__</script>
@@ -126,6 +127,7 @@ $("kpis").innerHTML = [
   kpi("Hiba", last.error ?? "—", last.error_hover || ""),
   kpi("Üres / nincs járat", last.empty ?? "—", "A keresés lefutott, de azon a napon nincs közvetlen járat."),
   kpi("Kitűzött RT min", last.pinned_min != null ? Math.round(last.pinned_min).toLocaleString("hu-HU") + " Ft" : "—", last.pinned_hover || ""),
+  kpi("Futási idő", last.duration_label || "—", last.duration_hover || "A teljes gyűjtés faliórája, percben."),
 ].join("");
 
 $("calendar").innerHTML = (data.days || []).map(d =>
@@ -295,6 +297,76 @@ def _duration(minutes: int | None) -> str:
     return f"{hours}ó {mins:02d}p"
 
 
+def _minutes_label(seconds: float) -> str:
+    minutes = seconds / 60
+    if minutes < 0.05:
+        return "0 perc"
+    rounded = round(minutes, 1)
+    if abs(rounded - round(rounded)) < 1e-6:
+        return f"{int(round(rounded))} perc"
+    return f"{rounded:.1f}".replace(".", ",") + " perc"
+
+
+def _parse_iso(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _duration_for_day(conn, collected_on: str, source: str) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT duration_seconds, planned, skipped, ok, empty, error,
+               started_at, finished_at
+        FROM collect_runs
+        WHERE collected_on = ? AND source = ?
+        ORDER BY (ok + empty + error) DESC, duration_seconds DESC
+        LIMIT 1
+        """,
+        (collected_on, source),
+    ).fetchone()
+    if row and row["duration_seconds"] is not None:
+        seconds = float(row["duration_seconds"])
+        return {
+            "duration_minutes": round(seconds / 60, 1),
+            "duration_label": _minutes_label(seconds),
+            "duration_hover": (
+                f"Teljes gyűjtés faliórája: {_minutes_label(seconds)} "
+                f"({row['started_at']} → {row['finished_at']}). "
+                f"Keresés: {row['ok']} ok, {row['error']} hiba, "
+                f"{row['empty']} üres, {row['skipped']} kihagyva. "
+                "A 12:00-es újrapróba külön, rövidebb futás."
+            ),
+        }
+    span = conn.execute(
+        """
+        SELECT MIN(collected_at) AS first_at, MAX(collected_at) AS last_at
+        FROM snapshots
+        WHERE collected_on = ? AND source = ?
+        """,
+        (collected_on, source),
+    ).fetchone()
+    start = _parse_iso(span["first_at"]) if span and span["first_at"] else None
+    end = _parse_iso(span["last_at"]) if span and span["last_at"] else None
+    if start and end:
+        seconds = max((end - start).total_seconds(), 0.0)
+        return {
+            "duration_minutes": round(seconds / 60, 1),
+            "duration_label": _minutes_label(seconds),
+            "duration_hover": (
+                f"Becsült idő az első és utolsó keresés között: "
+                f"{_minutes_label(seconds)}. A pontos mérés a következő "
+                "teljes gyűjtéstől lesz a collect_runs táblában."
+            ),
+        }
+    return {
+        "duration_minutes": None,
+        "duration_label": "—",
+        "duration_hover": "Még nincs mért futási idő.",
+    }
+
+
 def _median(values: list[float]) -> float:
     ordered = sorted(values)
     mid = len(ordered) // 2
@@ -370,6 +442,9 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
         "error": 0,
         "empty": 0,
         "pinned_min": None,
+        "duration_minutes": None,
+        "duration_label": "—",
+        "duration_hover": "Még nincs mért futási idő.",
         "ok_hover": "",
         "error_hover": "",
         "run_hover": "",
@@ -380,6 +455,7 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
     }
     if last_date:
         last_run.update(by_day[last_date])
+        last_run.update(_duration_for_day(conn, last_date, source))
         job_rows = conn.execute(
             """
             SELECT trip_type, origin, dest, outbound_date, return_date, status, offer_count

@@ -53,6 +53,21 @@ CREATE TABLE IF NOT EXISTS offers (
 CREATE INDEX IF NOT EXISTS idx_offers_snapshot ON offers(snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_snapshots_collected ON snapshots(collected_on);
 CREATE INDEX IF NOT EXISTS idx_snapshots_route ON snapshots(origin, dest, trip_type);
+
+CREATE TABLE IF NOT EXISTS collect_runs (
+    id INTEGER PRIMARY KEY,
+    collected_on TEXT NOT NULL,
+    source TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    duration_seconds REAL NOT NULL,
+    planned INTEGER NOT NULL,
+    skipped INTEGER NOT NULL,
+    ok INTEGER NOT NULL,
+    empty INTEGER NOT NULL,
+    error INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_collect_runs_day ON collect_runs(collected_on, source);
 """
 
 
@@ -201,6 +216,44 @@ def save_result(
     )
     conn.commit()
     return snapshot_id
+
+
+def save_collect_run(
+    conn: sqlite3.Connection,
+    *,
+    collected_on: date,
+    source: str,
+    started_at: datetime,
+    finished_at: datetime,
+    duration_seconds: float,
+    planned: int,
+    skipped: int,
+    ok: int,
+    empty: int,
+    error: int,
+) -> int:
+    cursor = conn.execute(
+        """
+        INSERT INTO collect_runs (
+            collected_on, source, started_at, finished_at, duration_seconds,
+            planned, skipped, ok, empty, error
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            collected_on.isoformat(),
+            source,
+            started_at.replace(microsecond=0).isoformat(),
+            finished_at.replace(microsecond=0).isoformat(),
+            float(duration_seconds),
+            planned,
+            skipped,
+            ok,
+            empty,
+            error,
+        ),
+    )
+    conn.commit()
+    return int(cursor.lastrowid)
 
 
 def status_rows(conn: sqlite3.Connection) -> dict[str, Any]:

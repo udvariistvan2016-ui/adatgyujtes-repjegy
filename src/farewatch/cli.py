@@ -37,7 +37,8 @@ def _cmd_collect(args: argparse.Namespace) -> int:
     )
     print(
         f"planned={summary.planned} skipped={summary.skipped} "
-        f"ok={summary.ok} empty={summary.empty} error={summary.error}"
+        f"ok={summary.ok} empty={summary.empty} error={summary.error} "
+        f"duration_min={summary.duration_seconds / 60:.1f}"
     )
     if not args.dry_run and not args.no_dashboard:
         dash = write_dashboard(settings)
