@@ -34,6 +34,7 @@ def _cmd_collect(args: argparse.Namespace) -> int:
         only_date=only_date,
         force=args.force,
         dry_run=args.dry_run,
+        scope=args.scope,
     )
     print(
         f"planned={summary.planned} skipped={summary.skipped} "
@@ -82,6 +83,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     result = run_analysis(settings)
     print(f"horizon CSV: {result['horizon_csv']} ({result['horizon_rows']} sor)")
     print(f"pinned CSV:  {result['pinned_csv']} ({result['pinned_rows']} sor)")
+    print(f"PDL CSV:     {result['pdl_csv']} ({result['pdl_rows']} sor)")
     if result["horizon_plot"]:
         print(f"horizon ábra: {result['horizon_png']}")
     if result["pinned_plot"]:
@@ -124,6 +126,12 @@ def build_parser() -> argparse.ArgumentParser:
     collect_p.add_argument("--limit", type=int, default=None, help="Csak ennyi horizont-dátum")
     collect_p.add_argument("--date", help="Egy konkrét OW dátum (YYYY-MM-DD)")
     collect_p.add_argument("--pinned-only", action="store_true")
+    collect_p.add_argument(
+        "--scope",
+        choices=["mad", "stay"],
+        default="mad",
+        help="mad: BUD–MAD horizont + kitűzött út (alap, 10:00). stay: Azori 7 éj naptár (15:00).",
+    )
     collect_p.add_argument("--force", action="store_true", help="Mai snapshot felülírása")
     collect_p.add_argument("--dry-run", action="store_true")
     collect_p.add_argument("--no-dashboard", action="store_true")

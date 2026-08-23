@@ -15,3 +15,9 @@ MAILTO=""
 
 # SQLite backup 12:40
 40 10 * * * /path/to/adatgyujtes-repjegy/scripts/backup-db.sh >> /path/to/adatgyujtes-repjegy/data/backup.log 2>&1
+
+# 15:00 Azori BUD–PDL 7 éj (scope stay) — 14:00 UTC télen. A 10:00-es MAD ettől független.
+0 14 * * * /path/to/adatgyujtes-repjegy/scripts/collect.sh --scope stay >> /path/to/adatgyujtes-repjegy/data/collect.log 2>&1
+
+# 17:00 PDL újrapróba — 16:00 UTC télen
+0 16 * * * /path/to/adatgyujtes-repjegy/scripts/collect.sh --scope stay >> /path/to/adatgyujtes-repjegy/data/collect.log 2>&1

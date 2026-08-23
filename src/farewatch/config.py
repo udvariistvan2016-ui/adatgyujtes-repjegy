@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,15 @@ class PinnedTrip:
     outbound_date: date
     return_date: date
     collect_oneways: bool = True
+
+
+@dataclass(frozen=True)
+class StayHorizon:
+    origin: str
+    dest: str
+    horizon_days: int
+    stay_nights: int
+    max_stops: int = 1
 
 
 @dataclass(frozen=True)
@@ -38,6 +47,7 @@ class Settings:
     max_retries: int
     collect_hour: str
     pinned_trips: tuple[PinnedTrip, ...]
+    stay_horizons: tuple[StayHorizon, ...]
     project_root: Path
     data_dir: Path
     db_path: Path
@@ -78,6 +88,16 @@ def load_settings(config_path: Path | None = None) -> Settings:
         )
         for item in raw.get("pinned_trips") or []
     )
+    stay_horizons = tuple(
+        StayHorizon(
+            origin=str(item["origin"]).upper(),
+            dest=str(item["dest"]).upper(),
+            horizon_days=int(item.get("horizon_days", 180)),
+            stay_nights=int(item["stay_nights"]),
+            max_stops=int(item.get("max_stops", 1)),
+        )
+        for item in raw.get("stay_horizons") or []
+    )
     data_dir = root / "data"
     return Settings(
         source=str(raw.get("source", "google_flights")),
@@ -97,6 +117,7 @@ def load_settings(config_path: Path | None = None) -> Settings:
         max_retries=int(raw.get("max_retries", 3)),
         collect_hour=str(raw.get("collect_hour", "06:00")),
         pinned_trips=pinned,
+        stay_horizons=stay_horizons,
         project_root=root,
         data_dir=data_dir,
         db_path=data_dir / "fares.sqlite3",

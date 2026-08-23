@@ -17,6 +17,13 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
         docs_dir=tmp_path / "docs",
     )
     collect(settings, source_name="mock", pinned_only=True, today=date(2026, 8, 21))
+    collect(
+        settings,
+        source_name="mock",
+        scope="stay",
+        limit=2,
+        today=date(2026, 8, 21),
+    )
     path = write_dashboard(settings, today=date(2026, 8, 21))
     html = path.read_text(encoding="utf-8")
     assert "BUD" in html
@@ -28,4 +35,7 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
     assert "Hobbi archívum" in html
     assert "Adatszerkezet" in html
     assert "Futási idő" in html
+    assert "Oda (márc. 12.)" in html
     assert (tmp_path / "docs" / ".nojekyll").exists()
+    assert "Azori" in html
+    assert '"dest": "PDL"' in html or "PDL" in html

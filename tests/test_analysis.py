@@ -20,5 +20,7 @@ def test_analyze_writes_csv(tmp_path):
     result = run_analysis(settings)
     assert result["horizon_rows"] >= 5
     assert result["pinned_rows"] == 1
+    assert result["pdl_rows"] == 0
     assert (tmp_path / "reports" / "horizon_min_prices.csv").exists()
     assert (tmp_path / "reports" / "pinned_rt_2027-03-12.csv").exists()
+    assert (tmp_path / "reports" / "pdl_rt_7n.csv").exists()

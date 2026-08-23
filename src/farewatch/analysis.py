@@ -13,7 +13,9 @@ def _ensure_reports(settings: Settings) -> Path:
     return settings.reports_dir
 
 
-def export_horizon_csv(conn: sqlite3.Connection, path: Path) -> int:
+def export_horizon_csv(
+    conn: sqlite3.Connection, path: Path, *, origin: str, dest: str
+) -> int:
     rows = conn.execute(
         """
         SELECT
@@ -29,9 +31,12 @@ def export_horizon_csv(conn: sqlite3.Connection, path: Path) -> int:
         JOIN offers o ON o.snapshot_id = s.id
         WHERE s.trip_type = 'OW'
           AND s.status = 'ok'
+          AND s.origin = ?
+          AND s.dest = ?
         GROUP BY s.id
         ORDER BY s.collected_on, s.outbound_date
-        """
+        """,
+        (origin, dest),
     ).fetchall()
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
@@ -65,6 +70,8 @@ def export_pinned_csv(conn: sqlite3.Connection, path: Path) -> int:
         FROM snapshots s
         JOIN offers o ON o.snapshot_id = s.id
         WHERE s.trip_type = 'RT'
+          AND s.origin = 'BUD'
+          AND s.dest = 'MAD'
           AND s.outbound_date = '2027-03-12'
           AND s.return_date = '2027-03-15'
           AND s.status = 'ok'
@@ -97,6 +104,7 @@ def _plot_horizon(conn: sqlite3.Connection, path: Path) -> bool:
         FROM snapshots s
         JOIN offers o ON o.snapshot_id = s.id
         WHERE s.trip_type = 'OW' AND s.status = 'ok'
+          AND s.origin = 'BUD' AND s.dest = 'MAD'
         GROUP BY s.id
         """
     ).fetchall()
@@ -130,6 +138,8 @@ def _plot_pinned(conn: sqlite3.Connection, path: Path) -> bool:
         FROM snapshots s
         JOIN offers o ON o.snapshot_id = s.id
         WHERE s.trip_type = 'RT'
+          AND s.origin = 'BUD'
+          AND s.dest = 'MAD'
           AND s.outbound_date = '2027-03-12'
           AND s.return_date = '2027-03-15'
           AND s.status = 'ok'
@@ -155,19 +165,73 @@ def _plot_pinned(conn: sqlite3.Connection, path: Path) -> bool:
     return True
 
 
+def export_pdl_rt_csv(
+    conn: sqlite3.Connection, path: Path, *, origin: str, dest: str
+) -> int:
+    rows = conn.execute(
+        """
+        SELECT
+            s.collected_on,
+            s.outbound_date,
+            s.return_date,
+            MIN(o.price_amount) AS min_price,
+            o.currency,
+            MIN(o.stops) AS stops,
+            GROUP_CONCAT(o.airline, ' | ') AS airlines
+        FROM snapshots s
+        JOIN offers o ON o.snapshot_id = s.id
+        WHERE s.trip_type = 'RT'
+          AND s.status = 'ok'
+          AND s.origin = ?
+          AND s.dest = ?
+        GROUP BY s.id
+        ORDER BY s.collected_on, s.outbound_date
+        """,
+        (origin, dest),
+    ).fetchall()
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "collected_on",
+                "outbound_date",
+                "return_date",
+                "min_price",
+                "currency",
+                "stops",
+                "airlines",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(dict(row))
+    return len(rows)
+
+
 def run_analysis(settings: Settings) -> dict[str, str | int | bool]:
     reports = _ensure_reports(settings)
     conn = connect(settings.db_path)
     try:
         horizon_csv = reports / "horizon_min_prices.csv"
         pinned_csv = reports / "pinned_rt_2027-03-12.csv"
+        pdl_csv = reports / "pdl_rt_7n.csv"
         horizon_png = reports / "horizon_price_vs_days.png"
         pinned_png = reports / "pinned_rt_timeseries.png"
+        pdl_origin, pdl_dest = "BUD", "PDL"
+        if settings.stay_horizons:
+            pdl_origin = settings.stay_horizons[0].origin
+            pdl_dest = settings.stay_horizons[0].dest
         return {
-            "horizon_rows": export_horizon_csv(conn, horizon_csv),
+            "horizon_rows": export_horizon_csv(
+                conn, horizon_csv, origin=settings.origin, dest=settings.dest
+            ),
             "pinned_rows": export_pinned_csv(conn, pinned_csv),
+            "pdl_rows": export_pdl_rt_csv(
+                conn, pdl_csv, origin=pdl_origin, dest=pdl_dest
+            ),
             "horizon_csv": str(horizon_csv),
             "pinned_csv": str(pinned_csv),
+            "pdl_csv": str(pdl_csv),
             "horizon_plot": _plot_horizon(conn, horizon_png),
             "pinned_plot": _plot_pinned(conn, pinned_png),
             "horizon_png": str(horizon_png),

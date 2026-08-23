@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS collect_runs (
     skipped INTEGER NOT NULL,
     ok INTEGER NOT NULL,
     empty INTEGER NOT NULL,
-    error INTEGER NOT NULL
+    error INTEGER NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'mad'
 );
 CREATE INDEX IF NOT EXISTS idx_collect_runs_day ON collect_runs(collected_on, source);
 """
@@ -78,7 +79,15 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
+    _ensure_collect_run_scope(conn)
     return conn
+
+
+def _ensure_collect_run_scope(conn: sqlite3.Connection) -> None:
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(collect_runs)")}
+    if "scope" not in cols:
+        conn.execute("ALTER TABLE collect_runs ADD COLUMN scope TEXT NOT NULL DEFAULT 'mad'")
+        conn.commit()
 
 
 def existing_snapshot(
@@ -231,13 +240,14 @@ def save_collect_run(
     ok: int,
     empty: int,
     error: int,
+    scope: str = "mad",
 ) -> int:
     cursor = conn.execute(
         """
         INSERT INTO collect_runs (
             collected_on, source, started_at, finished_at, duration_seconds,
-            planned, skipped, ok, empty, error
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            planned, skipped, ok, empty, error, scope
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             collected_on.isoformat(),
@@ -250,6 +260,7 @@ def save_collect_run(
             ok,
             empty,
             error,
+            scope,
         ),
     )
     conn.commit()
@@ -275,6 +286,8 @@ def status_rows(conn: sqlite3.Connection) -> dict[str, Any]:
         FROM snapshots s
         LEFT JOIN offers o ON o.snapshot_id = s.id
         WHERE s.trip_type = 'RT'
+          AND s.origin = 'BUD'
+          AND s.dest = 'MAD'
           AND s.outbound_date = '2027-03-12'
           AND s.return_date = '2027-03-15'
         GROUP BY s.id

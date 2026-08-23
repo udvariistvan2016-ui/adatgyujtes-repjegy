@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from farewatch.config import load_settings
 from farewatch.jobs import build_jobs, horizon_dates
@@ -39,3 +39,27 @@ def test_limit_does_not_drop_pinned():
     jobs = build_jobs(settings, date(2026, 8, 21), limit=2)
     assert sum(1 for j in jobs if j.trip_type == "OW" and j.origin == "BUD" and j.outbound_date <= date(2026, 8, 22)) == 2
     assert any(j.trip_type == "RT" for j in jobs)
+
+
+def test_mad_scope_excludes_pdl():
+    settings = load_settings()
+    jobs = build_jobs(settings, date(2026, 8, 21), scope="mad")
+    assert all(j.dest != "PDL" for j in jobs)
+    assert len(jobs) == 183
+
+
+def test_stay_scope_pdl_rt():
+    settings = load_settings()
+    jobs = build_jobs(settings, date(2026, 8, 21), scope="stay")
+    assert len(jobs) == 180
+    assert all(j.origin == "BUD" and j.dest == "PDL" for j in jobs)
+    assert all(j.trip_type == "RT" for j in jobs)
+    assert all(j.return_date == j.outbound_date + timedelta(days=7) for j in jobs)
+    assert all(j.max_stops == 1 for j in jobs)
+    assert all(j.direct_only is False for j in jobs)
+
+
+def test_pinned_only_stay_is_empty():
+    settings = load_settings()
+    jobs = build_jobs(settings, date(2026, 8, 21), pinned_only=True, scope="stay")
+    assert jobs == []

@@ -73,3 +73,76 @@ def test_map_round_trip_splits_legs():
     assert len(offers) == 1
     assert offers[0].is_direct is True
     assert offers[0].return_departure_at == "2027-03-15T16:00:00"
+
+
+def test_map_keeps_flight_numbers():
+    item = SimpleNamespace(
+        type="W6",
+        price=19990,
+        airlines=["Wizz Air"],
+        flights=[_seg("BUD", "MAD", 12, 14)],
+    )
+    offers = map_flights(_request(), [item], flight_codes=[["W6 2371"]])
+    assert offers[0].outbound_flights == "W6 2371"
+
+
+def test_map_keeps_one_stop_when_max_stops_1():
+    item = SimpleNamespace(
+        type="multi",
+        price=75914,
+        airlines=["TAP Air Portugal"],
+        flights=[_seg("BUD", "LIS", 12, 6), _seg("LIS", "PDL", 12, 11)],
+    )
+    request = _request(
+        dest="PDL",
+        direct_only=False,
+        max_stops=1,
+    )
+    offers = map_flights(request, [item])
+    assert len(offers) == 1
+    assert offers[0].airline_code == "TP"
+    assert offers[0].is_direct is False
+    assert offers[0].stops == 1
+
+
+def test_map_drops_two_stops_when_max_stops_1():
+    item = SimpleNamespace(
+        type="multi",
+        price=50000,
+        airlines=["Lufthansa"],
+        flights=[
+            _seg("BUD", "MUC", 12, 6),
+            _seg("MUC", "FRA", 12, 9),
+            _seg("FRA", "PDL", 12, 13),
+        ],
+    )
+    offers = map_flights(
+        _request(dest="PDL", direct_only=False, max_stops=1),
+        [item],
+    )
+    assert offers == []
+
+
+def test_map_keeps_one_stop_each_way_rt():
+    item = SimpleNamespace(
+        type="multi",
+        price=80000,
+        airlines=["TAP Air Portugal"],
+        flights=[
+            _seg("BUD", "LIS", 12, 6),
+            _seg("LIS", "PDL", 12, 11),
+            _seg("PDL", "LIS", 19, 8),
+            _seg("LIS", "BUD", 19, 14),
+        ],
+    )
+    request = _request(
+        dest="PDL",
+        return_date=date(2027, 3, 19),
+        direct_only=False,
+        max_stops=1,
+    )
+    offers = map_flights(request, [item])
+    assert len(offers) == 1
+    assert offers[0].stops == 1
+    assert offers[0].extra["out_stops"] == 1
+    assert offers[0].extra["in_stops"] == 1

@@ -15,3 +15,10 @@ def test_locked_scope():
     assert trip.outbound_date.isoformat() == "2027-03-12"
     assert trip.return_date.isoformat() == "2027-03-15"
     assert trip.collect_oneways is True
+    assert len(settings.stay_horizons) == 1
+    stay = settings.stay_horizons[0]
+    assert stay.origin == "BUD"
+    assert stay.dest == "PDL"
+    assert stay.horizon_days == 180
+    assert stay.stay_nights == 7
+    assert stay.max_stops == 1

@@ -86,6 +86,7 @@ def collect(
     force: bool = False,
     dry_run: bool = False,
     today: date | None = None,
+    scope: str = "mad",
 ) -> CollectSummary:
     source_name = source_name or settings.source
     adapter = get_adapter(source_name)
@@ -96,11 +97,13 @@ def collect(
         limit=limit,
         pinned_only=pinned_only,
         only_date=only_date,
+        scope=scope,
     )
     summary = CollectSummary(planned=len(jobs))
     logger.info(
-        "Gyűjtés: %s job, forrás=%s, collected_on=%s",
+        "Gyűjtés: %s job, scope=%s, forrás=%s, collected_on=%s",
         len(jobs),
+        scope,
         adapter.name,
         today.isoformat(),
     )
@@ -171,6 +174,7 @@ def collect(
             ok=summary.ok,
             empty=summary.empty,
             error=summary.error,
+            scope=scope,
         )
         logger.info(
             "Gyűjtés kész: %.1f perc (%s ok, %s hiba, %s üres, %s kihagyva)",

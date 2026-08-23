@@ -8,6 +8,7 @@ Repo: https://github.com/udvariistvan2016-ui/adatgyujtes-repjegy
 
 - **Horizont:** egyirányú BUD→MAD, economy, 1 felnőtt, csak közvetlen, **180 nap** előre, HUF, megjelenő legalacsonyabb (basic) ár.
 - **Kitűzött út:** oda-vissza **2027-03-12 → 2027-03-15**, plusz egy-egy egyirányú ugyanerre a két napra (oda BUD–MAD, vissza MAD–BUD).
+- **Azori naptár (külön futás):** BUD→PDL, **7 éjszakás** oda-vissza, max 1 átszállás, **180 nap**, minden naptári napra. Nem a 10:00-es MAD része.
 
 A scope a [`config.yaml`](config.yaml) fájlban van rögzítve.
 
@@ -51,6 +52,12 @@ Teljes napi futás (~180 dátum + kitűzött RT, kb. 15–40 perc):
 
 ```powershell
 python -m farewatch collect
+```
+
+Azori 7 éj naptár (külön, ~180 RT, kb. 25 perc) — a MAD-gyűjtőt **nem** érinti:
+
+```powershell
+python -m farewatch collect --scope stay
 ```
 
 Ha a mai nap már lefutott sikeresen: `--force` mindent felülír.
@@ -97,19 +104,25 @@ GUI-hoz: [DB Browser for SQLite](https://sqlitebrowser.org/) — nyisd meg a `da
 
 ## Ütemezés (laptop, amíg nincs VPS)
 
-Napi **10:00** kezdet — akkor már be van kapcsolva a gép. A 12:00-es második futás csak a hibás kereséseket kéri újra (a sikerest kihagyja), majd újra HTML + git push.
+Napi **10:00** kezdet — akkor már be van kapcsolva a gép. A 12:00-es második futás csak a hibás MAD kereséseket kéri újra, majd újra HTML + git push.
+
+Azori PDL: **15:00** (`--scope stay`), újrapróba **17:00**. Ha a PDL hibázik, a 10:00-es MAD-idősor már kész.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-task.ps1
 ```
 
-Ez két Task Scheduler feladatot hoz létre, **a bejelentkezett felhasználóként** (kell a git push-hoz):
+Ez Task Scheduler feladatokat hoz létre, **a bejelentkezett felhasználóként** (kell a git push-hoz):
 
-- `Farewatch-BUD-MAD` — 10:00: collect → dashboard → `docs/` commit + push
+- `Farewatch-BUD-MAD` — 10:00: collect (csak MAD) → dashboard → `docs/` commit + push
 - `Farewatch-BUD-MAD-retry` — 12:00: ugyanaz; a sikerest kihagyja, a hibásat újra kéri
 - `Farewatch-BUD-MAD-backup` — 12:40: SQLite másolat
+- `Farewatch-BUD-PDL` — 15:00: collect `--scope stay` (BUD–PDL 7 éj)
+- `Farewatch-BUD-PDL-retry` — 17:00: hibás PDL keresések újra
 
-Ha 10:00-kor a laptop még alszik / ki van kapcsolva, a `StartWhenAvailable` bekapcsoláskor (bejelentkezés után) elindítja. Alvásból ébresztést a Windows nem mindig tud; a biztos út: 10-re már nyitva legyen a gép, te bejelentkezve.
+A 10:00-es MAD-task argumentum nélkül marad (alap `scope=mad`). PDL ki: a két PDL-task Disable, vagy üres `stay_horizons` a configban.
+
+Laptop délután is legyen fent a 15:00-es PDL-hez. Ha 10:00-kor a laptop még alszik / ki van kapcsolva, a `StartWhenAvailable` bekapcsoláskor (bejelentkezés után) elindítja.
 
 Kézi futtatás: `.\scripts\collect.ps1`  
 Log: `data\collect.log`
@@ -125,7 +138,8 @@ crontab -e
 
 | Parancs | Mit csinál |
 | --- | --- |
-| `python -m farewatch collect` | Napi gyűjtés |
+| `python -m farewatch collect` | Napi MAD gyűjtés (180 OW + kitűzött RT) |
+| `python -m farewatch collect --scope stay` | Azori BUD–PDL 7 éj naptár (180 RT) |
 | `python -m farewatch collect --pinned-only` | Csak a 2027-03-12/15 út |
 | `python -m farewatch collect --dry-run` | Job lista, hálózat nélkül |
 | `python -m farewatch status` | Hány snapshot, kitűzött RT min ár |

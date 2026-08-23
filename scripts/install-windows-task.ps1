@@ -47,10 +47,15 @@ function Install-DailyTask {
 Install-DailyTask -Name "Farewatch-BUD-MAD" -Argument $CollectArg -At ([datetime]"10:00")
 Install-DailyTask -Name "Farewatch-BUD-MAD-retry" -Argument $CollectArg -At ([datetime]"12:00")
 Install-DailyTask -Name "Farewatch-BUD-MAD-backup" -Argument $BackupArg -At ([datetime]"12:40")
+$CollectArgPdl = "$CollectArg --scope stay"
+Install-DailyTask -Name "Farewatch-BUD-PDL" -Argument $CollectArgPdl -At ([datetime]"15:00")
+Install-DailyTask -Name "Farewatch-BUD-PDL-retry" -Argument $CollectArgPdl -At ([datetime]"17:00")
 
 Write-Host "Kesz. Laptopon, bejelentkezve:"
 Write-Host "  10:00  Farewatch-BUD-MAD         gyujtes + dashboard + git push"
 Write-Host "  12:00  Farewatch-BUD-MAD-retry   hibas keresesek ujra, HTML + push"
 Write-Host "  12:40  Farewatch-BUD-MAD-backup  SQLite masolat"
+Write-Host "  15:00  Farewatch-BUD-PDL         Azori 7 ej naptar (scope stay)"
+Write-Host "  17:00  Farewatch-BUD-PDL-retry   hibas PDL keresesek ujra"
 Write-Host "Ha 10:00-kor a gep meg ki van, bejelentkezes utan a StartWhenAvailable elinditja."
 Write-Host "Ellenorzes:  Get-ScheduledTask -TaskName 'Farewatch-*'"

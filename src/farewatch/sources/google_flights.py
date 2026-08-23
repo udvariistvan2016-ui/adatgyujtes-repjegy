@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +14,13 @@ AIRLINE_CODES = {
     "ryanair": "FR",
     "iberia": "IB",
     "iberia express": "I2",
+    "tap air portugal": "TP",
+    "tap portugal": "TP",
+    "tap": "TP",
+    "azores airlines": "S4",
+    "sata": "S4",
+    "sata air acores": "S4",
+    "sata internacional": "S4",
 }
 
 # Nyilvános, nem személyes Google consent sütik — EU-ban a kereső consent.google.com-ra
@@ -51,6 +59,12 @@ def _airline_code(name: str) -> str | None:
     return AIRLINE_CODES.get(name.strip().lower())
 
 
+def _effective_max_stops(request: SearchRequest) -> int | None:
+    if request.max_stops is not None:
+        return request.max_stops
+    return 0 if request.direct_only else None
+
+
 def _split_legs(segments: list[Any], dest: str, has_return: bool) -> tuple[list[Any], list[Any]]:
     if not has_return:
         return list(segments), []
@@ -70,18 +84,50 @@ def _split_legs(segments: list[Any], dest: str, has_return: bool) -> tuple[list[
     return outbound, inbound
 
 
-def map_flights(request: SearchRequest, items: list[Any]) -> list[Offer]:
+def flight_codes_from_html(html: str) -> list[list[str]]:
+    """A fast-flights parser eldobja; a Google JS 22-es mezője: ['W6', '2371', None, 'Wizz Air']."""
+    try:
+        from selectolax.lexbor import LexborHTMLParser
+
+        script = LexborHTMLParser(html).css_first(r"script.ds\:1")
+        if script is None:
+            return []
+        blob = script.text().split("data:", 1)[1].rsplit(",", 1)[0]
+        if blob.endswith("errorHasStatus: true"):
+            return []
+        rows = json.loads(blob)[3][0]
+        if not rows:
+            return []
+        codes: list[list[str]] = []
+        for row in rows:
+            found: list[str] = []
+            for segment in row[0][2]:
+                info = segment[22] if len(segment) > 22 else None
+                if isinstance(info, list) and len(info) >= 2 and info[0] and info[1]:
+                    found.append(f"{info[0]} {info[1]}")
+            codes.append(found)
+        return codes
+    except Exception:  # noqa: BLE001 — járatszám opcionális
+        return []
+
+
+def map_flights(
+    request: SearchRequest,
+    items: list[Any],
+    flight_codes: list[list[str]] | None = None,
+) -> list[Offer]:
     offers: list[Offer] = []
-    for item in items:
+    for index, item in enumerate(items):
         segments = list(getattr(item, "flights", []) or [])
         outbound, inbound = _split_legs(segments, request.dest, request.return_date is not None)
         airlines = [str(name) for name in (getattr(item, "airlines", None) or []) if name]
         airline = airlines[0] if airlines else "unknown"
         out_stops = max(len(outbound) - 1, 0)
         in_stops = max(len(inbound) - 1, 0) if inbound else 0
-        stops = out_stops + in_stops
+        stops = max(out_stops, in_stops)
         is_direct = out_stops == 0 and (not inbound or in_stops == 0)
-        if request.direct_only and not is_direct:
+        limit = _effective_max_stops(request)
+        if limit is not None and (out_stops > limit or (inbound and in_stops > limit)):
             continue
         duration = sum(int(getattr(seg, "duration", 0) or 0) for seg in outbound + inbound) or None
         first_out = outbound[0] if outbound else None
@@ -91,12 +137,19 @@ def map_flights(request: SearchRequest, items: list[Any]) -> list[Offer]:
         price = getattr(item, "price", None)
         if price is None:
             continue
+        codes = flight_codes[index] if flight_codes and index < len(flight_codes) else []
+        out_code = codes[0] if codes else ""
+        in_code = ""
+        if request.return_date and len(codes) > len(outbound):
+            in_code = codes[len(outbound)]
+        elif request.return_date and len(codes) > 1:
+            in_code = codes[1]
         offers.append(
             Offer(
                 airline=airline,
                 airline_code=_airline_code(airline),
-                outbound_flights="+".join(airlines) if airlines else "",
-                return_flights="+".join(airlines[1:]) if request.return_date and len(airlines) > 1 else "",
+                outbound_flights=out_code or "+".join(airlines) if airlines else out_code,
+                return_flights=in_code,
                 departure_at=_fmt_dt(getattr(first_out, "departure", None) if first_out else None),
                 arrival_at=_fmt_dt(getattr(last_out, "arrival", None) if last_out else None),
                 return_departure_at=_fmt_dt(getattr(first_in, "departure", None) if first_in else None),
@@ -107,7 +160,14 @@ def map_flights(request: SearchRequest, items: list[Any]) -> list[Offer]:
                 price_amount=float(price),
                 currency=request.currency,
                 fare_brand="basic",
-                extra={"type": getattr(item, "type", None), "airlines": airlines},
+                extra={
+                    "type": getattr(item, "type", None),
+                    "airlines": airlines,
+                    "plane_type": getattr(first_out, "plane_type", None),
+                    "return_plane_type": getattr(first_in, "plane_type", None) if first_in else None,
+                    "out_stops": out_stops,
+                    "in_stops": in_stops,
+                },
             )
         )
     return offers
@@ -116,12 +176,13 @@ def map_flights(request: SearchRequest, items: list[Any]) -> list[Offer]:
 def _build_query(request: SearchRequest):
     from fast_flights import FlightQuery, Passengers, create_query
 
+    max_stops = _effective_max_stops(request)
     legs = [
         FlightQuery(
             date=request.outbound_date.isoformat(),
             from_airport=request.origin,
             to_airport=request.dest,
-            max_stops=0 if request.direct_only else None,
+            max_stops=max_stops,
         )
     ]
     trip = "one-way"
@@ -131,7 +192,7 @@ def _build_query(request: SearchRequest):
                 date=request.return_date.isoformat(),
                 from_airport=request.dest,
                 to_airport=request.origin,
-                max_stops=0 if request.direct_only else None,
+                max_stops=max_stops,
             )
         )
         trip = "round-trip"
@@ -143,7 +204,7 @@ def _build_query(request: SearchRequest):
         passengers=Passengers(adults=request.adults),
         language=request.language or "en-US",
         currency=request.currency,  # type: ignore[arg-type]
-        max_stops=0 if request.direct_only else None,
+        max_stops=max_stops,
         carry_on_bags=request.carry_on_bags,
         checked_bags=request.checked_bags,
         hide_separate_and_self_transfer=True,
@@ -216,7 +277,7 @@ class GoogleFlightsSource(SourceAdapter):
             )
 
         items = list(result_list)
-        offers = map_flights(request, items)
+        offers = map_flights(request, items, flight_codes=flight_codes_from_html(html))
         status = "ok" if offers else "empty"
         return SearchResult(
             request=request,

@@ -18,6 +18,7 @@ class SearchRequest:
     direct_only: bool
     carry_on_bags: int
     checked_bags: int
+    max_stops: int | None = None
 
     @property
     def trip_type(self) -> str:

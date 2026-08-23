@@ -37,3 +37,12 @@ pinned_trips:
     outbound_date: "2027-03-12"
     return_date: "2027-03-15"
     collect_oneways: true
+
+# Azori naptár: külön délutáni futás (`collect --scope stay`). A 10:00-es MAD ezt nem látja.
+# 7 éj = vissza D+7. Később: a legolcsóbb napok körül 4/6/8 éj (kevés extra keresés).
+stay_horizons:
+  - origin: BUD
+    dest: PDL
+    horizon_days: 180
+    stay_nights: 7
+    max_stops: 1
