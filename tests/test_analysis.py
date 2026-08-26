@@ -15,6 +15,8 @@ def test_analyze_writes_csv(tmp_path):
         reports_dir=tmp_path / "reports",
         backups_dir=tmp_path / "backups",
         docs_dir=tmp_path / "docs",
+        request_delay_seconds=0,
+        request_jitter_seconds=0,
     )
     collect(settings, source_name="mock", limit=5, today=date(2026, 8, 21))
     result = run_analysis(settings)

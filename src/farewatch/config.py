@@ -20,12 +20,36 @@ class PinnedTrip:
 
 
 @dataclass(frozen=True)
+class PinnedFlex:
+    """4×4 oda/vissza rács a kitűzött út körül; RT csomag, egyirányú nélkül."""
+
+    origin: str
+    dest: str
+    outbound_from: date
+    outbound_to: date
+    return_from: date
+    return_to: date
+
+
+@dataclass(frozen=True)
 class StayHorizon:
     origin: str
     dest: str
     horizon_days: int
     stay_nights: int
     max_stops: int = 1
+
+
+@dataclass(frozen=True)
+class ViaProbe:
+    """Kétjegyű próba: origin→via + via→dest (és vissza), nem a 180 napos naptár."""
+
+    origin: str
+    via: str
+    dest: str
+    stay_nights: int
+    offsets: tuple[int, ...]
+    max_stops: int = 0
 
 
 @dataclass(frozen=True)
@@ -47,7 +71,9 @@ class Settings:
     max_retries: int
     collect_hour: str
     pinned_trips: tuple[PinnedTrip, ...]
+    pinned_flex: tuple[PinnedFlex, ...]
     stay_horizons: tuple[StayHorizon, ...]
+    via_probes: tuple[ViaProbe, ...]
     project_root: Path
     data_dir: Path
     db_path: Path
@@ -88,6 +114,17 @@ def load_settings(config_path: Path | None = None) -> Settings:
         )
         for item in raw.get("pinned_trips") or []
     )
+    pinned_flex = tuple(
+        PinnedFlex(
+            origin=str(item["origin"]).upper(),
+            dest=str(item["dest"]).upper(),
+            outbound_from=_as_date(item["outbound_from"]),
+            outbound_to=_as_date(item["outbound_to"]),
+            return_from=_as_date(item["return_from"]),
+            return_to=_as_date(item["return_to"]),
+        )
+        for item in raw.get("pinned_flex") or []
+    )
     stay_horizons = tuple(
         StayHorizon(
             origin=str(item["origin"]).upper(),
@@ -97,6 +134,17 @@ def load_settings(config_path: Path | None = None) -> Settings:
             max_stops=int(item.get("max_stops", 1)),
         )
         for item in raw.get("stay_horizons") or []
+    )
+    via_probes = tuple(
+        ViaProbe(
+            origin=str(item["origin"]).upper(),
+            via=str(item["via"]).upper(),
+            dest=str(item["dest"]).upper(),
+            stay_nights=int(item.get("stay_nights", 7)),
+            offsets=tuple(int(offset) for offset in (item.get("offsets") or (14, 21, 28, 35, 42))),
+            max_stops=int(item.get("max_stops", 0)),
+        )
+        for item in raw.get("via_probes") or []
     )
     data_dir = root / "data"
     return Settings(
@@ -117,7 +165,9 @@ def load_settings(config_path: Path | None = None) -> Settings:
         max_retries=int(raw.get("max_retries", 3)),
         collect_hour=str(raw.get("collect_hour", "06:00")),
         pinned_trips=pinned,
+        pinned_flex=pinned_flex,
         stay_horizons=stay_horizons,
+        via_probes=via_probes,
         project_root=root,
         data_dir=data_dir,
         db_path=data_dir / "fares.sqlite3",

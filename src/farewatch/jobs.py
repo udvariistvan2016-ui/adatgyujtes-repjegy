@@ -2,10 +2,30 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from farewatch.config import Settings
+from farewatch.config import PinnedFlex, Settings
 from farewatch.models import SearchRequest
 
-SCOPES = ("mad", "stay")
+SCOPES = ("mad", "stay", "probe")
+
+
+def date_span(start: date, end: date) -> list[date]:
+    if end < start:
+        return []
+    days: list[date] = []
+    cursor = start
+    while cursor <= end:
+        days.append(cursor)
+        cursor += timedelta(days=1)
+    return days
+
+
+def flex_rt_pairs(flex: PinnedFlex) -> list[tuple[date, date]]:
+    pairs: list[tuple[date, date]] = []
+    for outbound in date_span(flex.outbound_from, flex.outbound_to):
+        for inbound in date_span(flex.return_from, flex.return_to):
+            if inbound > outbound:
+                pairs.append((outbound, inbound))
+    return pairs
 
 
 def horizon_dates(today: date, horizon_days: int) -> list[date]:
@@ -52,6 +72,36 @@ def build_jobs(
         )
         values.update(overrides)
         return SearchRequest(**values)  # type: ignore[arg-type]
+
+    if scope == "probe":
+        if pinned_only:
+            return []
+        for probe in settings.via_probes:
+            dates = [today + timedelta(days=offset) for offset in probe.offsets]
+            if only_date is not None:
+                dates = [day for day in dates if day == only_date]
+            if limit is not None:
+                dates = dates[:limit]
+            for outbound in dates:
+                inbound = outbound + timedelta(days=probe.stay_nights)
+                legs = (
+                    (probe.origin, probe.via, outbound),
+                    (probe.via, probe.dest, outbound),
+                    (probe.dest, probe.via, inbound),
+                    (probe.via, probe.origin, inbound),
+                )
+                for origin, dest, day in legs:
+                    add(
+                        base(
+                            origin=origin,
+                            dest=dest,
+                            outbound_date=day,
+                            return_date=None,
+                            direct_only=probe.max_stops == 0,
+                            max_stops=probe.max_stops,
+                        )
+                    )
+        return jobs
 
     if scope == "stay":
         if pinned_only:
@@ -110,6 +160,19 @@ def build_jobs(
                     dest=trip.origin,
                     outbound_date=trip.return_date,
                     return_date=None,
+                )
+            )
+
+    for flex in settings.pinned_flex:
+        for outbound, inbound in flex_rt_pairs(flex):
+            if outbound < today:
+                continue
+            add(
+                base(
+                    origin=flex.origin,
+                    dest=flex.dest,
+                    outbound_date=outbound,
+                    return_date=inbound,
                 )
             )
 

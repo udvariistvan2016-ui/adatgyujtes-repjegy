@@ -8,7 +8,7 @@ Repo: https://github.com/udvariistvan2016-ui/adatgyujtes-repjegy
 
 - **Horizont:** egyirányú BUD→MAD, economy, 1 felnőtt, csak közvetlen, **180 nap** előre, HUF, megjelenő legalacsonyabb (basic) ár.
 - **Kitűzött út:** oda-vissza **2027-03-12 → 2027-03-15**, plusz egy-egy egyirányú ugyanerre a két napra (oda BUD–MAD, vissza MAD–BUD).
-- **Azori naptár (külön futás):** BUD→PDL, **7 éjszakás** oda-vissza, max 1 átszállás, **180 nap**, minden naptári napra. Nem a 10:00-es MAD része.
+- **Azori naptár (külön futás):** BUD→PDL, **7 éjszakás** oda-vissza, max 1 átszállás, **90 nap**. Nem a 10:00-es MAD része.
 
 A scope a [`config.yaml`](config.yaml) fájlban van rögzítve.
 
@@ -48,17 +48,25 @@ python -m farewatch analyze
 python -m farewatch collect --date 2026-08-22
 ```
 
-Teljes napi futás (~180 dátum + kitűzött RT, kb. 15–40 perc):
+Teljes napi futás (~180 dátum + kitűzött RT + 15 rugalmas RT, kb. 20–45 perc):
 
 ```powershell
 python -m farewatch collect
 ```
 
-Azori 7 éj naptár (külön, ~180 RT, kb. 25 perc) — a MAD-gyűjtőt **nem** érinti:
+Azori 7 éj naptár (külön, ~90 RT, kb. 12 perc) — a MAD-gyűjtőt **nem** érinti:
 
 ```powershell
 python -m farewatch collect --scope stay
 ```
+
+Wizz–LIS–Azores **próba** (5 nap × 4 közvetlen OW, ~3 perc), nem ütemezett:
+
+```powershell
+python -m farewatch collect --scope probe
+```
+
+A dashboardon ez külön, rózsaszín szegélyű blokk: négy láb összege, webes self-transferhez hasonlítható.
 
 Ha a mai nap már lefutott sikeresen: `--force` mindent felülír.
 Ha **csak hibás** keresések voltak, futtasd újra ugyanazt a parancsot — a hibásak automatikusan újrapróbálódnak, a sikerest kihagyja.
@@ -138,9 +146,9 @@ crontab -e
 
 | Parancs | Mit csinál |
 | --- | --- |
-| `python -m farewatch collect` | Napi MAD gyűjtés (180 OW + kitűzött RT) |
-| `python -m farewatch collect --scope stay` | Azori BUD–PDL 7 éj naptár (180 RT) |
-| `python -m farewatch collect --pinned-only` | Csak a 2027-03-12/15 út |
+| `python -m farewatch collect` | Napi MAD gyűjtés (180 OW + kitűzött RT + rugalmas 4×4) |
+| `python -m farewatch collect --scope stay` | Azori BUD–PDL 7 éj naptár (90 RT) |
+| `python -m farewatch collect --pinned-only` | Kitűzött 12–15. + rugalmas rács |
 | `python -m farewatch collect --dry-run` | Job lista, hálózat nélkül |
 | `python -m farewatch status` | Hány snapshot, kitűzött RT min ár |
 | `python -m farewatch dashboard` | HTML a `docs/` mappába |

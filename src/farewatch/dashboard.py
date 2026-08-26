@@ -5,20 +5,22 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from farewatch.config import Settings, StayHorizon
+from farewatch.config import Settings, StayHorizon, ViaProbe
 from farewatch.db import connect
+from farewatch.jobs import flex_rt_pairs
 
 TEMPLATE = r"""<!DOCTYPE html>
 <html lang="hu">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Farewatch — BUD–MAD</title>
+  <title>Farewatch — BUD–MAD és Azori</title>
   <style>
     :root {
       --bg: #0f1419; --card: #1a222c; --line: #2b3642; --text: #e8eef4;
       --muted: #93a4b5; --ok: #3dd68c; --partial: #f5c542; --err: #ff6b6b;
       --miss: #5c6b7a; --accent: #6cb6ff; --today: #ff8c42; --min: #3dd68c;
+      --azores: #1bb4d4; --probe: #e85aaa;
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.45; }
@@ -27,6 +29,29 @@ TEMPLATE = r"""<!DOCTYPE html>
     h1 svg { flex-shrink: 0; }
     h2 { font-size: 1.15rem; margin: 32px 0 12px; }
     h3 { font-size: 1rem; margin: 20px 0 10px; color: var(--muted); font-weight: 600; }
+    .route { margin: 36px 0 0; padding: 22px 20px 28px; border-radius: 18px; }
+    .route h2 { margin-top: 0; }
+    .route-mad { background: #151c24; border: 1px solid #334155; }
+    .route-azores {
+      background: linear-gradient(180deg, #102830 0%, #0f1419 48px);
+      border: 2px solid var(--azores);
+      box-shadow: 0 0 0 1px rgba(27,180,212,.2);
+    }
+    .route-azores h2 { color: #8ee7f7; }
+    .route-probe {
+      background: linear-gradient(180deg, #2a1524 0%, #0f1419 52px);
+      border: 2px dashed var(--probe);
+    }
+    .route-probe h2 { color: #f7a8d0; }
+    .toc { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 22px; }
+    .toc a {
+      color: var(--text); text-decoration: none; font-size: 0.88rem; font-weight: 650;
+      padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card);
+    }
+    .toc a.mad { border-color: #6cb6ff; }
+    .toc a.azores { border-color: var(--azores); color: #8ee7f7; }
+    .toc a.probe { border-color: var(--probe); color: #f7a8d0; }
+    .scroll { overflow-x: auto; }
     .sub { color: var(--muted); margin-bottom: 24px; }
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
@@ -60,15 +85,21 @@ TEMPLATE = r"""<!DOCTYPE html>
     <svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true">
       <path fill="#6cb6ff" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
     </svg>
-    BUD → MAD jegyárak
+    Farewatch — jegyárak
   </h1>
   <p class="sub">Utolsó frissítés: <span id="generated"></span></p>
+  <nav class="toc" aria-label="Útvonalak">
+    <a class="mad" href="#mad-block">Madrid · BUD–MAD</a>
+    <a class="azores" href="#pdl-block">Azori · 7 éj csomag</a>
+    <a class="probe" href="#probe-block">Próba · Wizz–LIS–Azores</a>
+  </nav>
   <div class="card about">
-    <p>Hobbi archívum: a Google Flights-on <strong>nem lehet visszamenőleg</strong> megnézni, mennyibe került tegnap egy jegy, ezért minden nap lementjük a BUD→MAD közvetlen economy árakat.</p>
-    <p><strong>Horizont</strong> = a gyűjtés napjától számított következő <span id="horizon-days">180</span> indulási nap, egyenként egy kereséssel (egyirányú, 1 felnőtt, HUF, basic). Nem „a 180 nap legolcsóbbja”, hanem 180 külön pillanatfelvétel.</p>
-    <p><strong>Kitűzött út</strong> = mindig ugyanaz az oda-vissza csomag (2027. márc. 12. BUD→MAD + márc. 15. MAD→BUD). Az RT ár egy csomag, nem két egyirányú összege.</p>
-    <p>Külön, délutáni futás: <strong>BUD→PDL</strong> 7 éjszakás oda-vissza (max 1 átszállás). A Madrid-gyűjtőtől független; a naptár minden napra mutatja, mennyit számít egy nap eltolás.</p>
+    <p>Hobbi archívum: a Google Flights-on <strong>nem lehet visszamenőleg</strong> megnézni, mennyibe került tegnap egy jegy. Három külön blokk: Madrid, Azori egyjegyes naptár, és egy rövid Wizz–LIS–Azores self-transfer próba.</p>
+    <p><strong>Madrid:</strong> 180 nap egyirányú közvetlen + kitűzött RT (2027. márc. 12–15.). <strong>Azori:</strong> külön délutáni futás, BUD→PDL 7 éj, max 1 átszállás, egy jegy, 90 nap. <strong>Próba:</strong> néhány nap, négy közvetlen láb összege (BUD–LIS + LIS–PDL oda és vissza).</p>
   </div>
+  <section class="route route-mad" id="mad-block">
+  <h2>Madrid — BUD → MAD, közvetlen</h2>
+  <p class="hint">10:00-es gyűjtés. Horizont = a következő <span id="horizon-days">180</span> indulási nap, egyenként egy egyirányú keresés (1 felnőtt, HUF, basic). A kitűzött út RT ára egy csomag, nem két OW összege.</p>
   <div class="kpis" id="kpis"></div>
 
   <h2>Gyűjtési napok</h2>
@@ -90,6 +121,10 @@ TEMPLATE = r"""<!DOCTYPE html>
   <p class="hint" id="pinned-caption"></p>
   <div class="card" id="pinned-flights"></div>
 
+  <h2>Kitűzött rugalmas — oda márc. 10–13., vissza márc. 14–17.</h2>
+  <p class="hint">16 oda-vissza csomag (4×4 nap). A 12–15. a fix kitűzés; a többi ±1–2 nap, ha a foglalón olcsóbb. Az aznapi gyűjtés, ár szerint növekvőben. RT = egy csomag, nem két egyirányú összege.</p>
+  <div class="card" id="flex-flights"></div>
+
   <h2>Horizont — egyirányú (OW) napi minimum</h2>
   <svg id="horizon" class="chart" viewBox="0 0 1000 280" preserveAspectRatio="xMidYMid meet"></svg>
   <p class="hint">A vízszintes tengely a 180 napos horizont (indulásig hátralévő napok). Halvány kék: nyers min. Kék: 7 napos simított görbe. Zöld szaggatott: a horizont minimuma. Narancs pötty: a mai indulási nap (ha van adat).</p>
@@ -101,10 +136,11 @@ TEMPLATE = r"""<!DOCTYPE html>
 
   <h2>Legolcsóbb közelgő járatok</h2>
   <div class="card" id="flights"></div>
+  </section>
 
-  <section id="pdl-block">
-  <h2>Azori — BUD → PDL, 7 éj, max 1 átszállás</h2>
-  <p class="hint">Külön délutáni gyűjtés (15:00). Oda-vissza csomag, vissza = indulás + 7 nap. A MAD-gyűjtőtől független naptár és KPI.</p>
+  <section class="route route-azores" id="pdl-block">
+  <h2>Azori — BUD → PDL, 7 éj, egy jegy</h2>
+  <p class="hint">Külön délutáni gyűjtés (15:00), <strong>90 nap</strong>. Google oda-vissza <strong>csomag</strong>, vissza = indulás + 7 nap, max 1 átszállás / láb. Nem keveredik a Madrid-naptárral. A fapados kétjegyű LIS-átszállás ide nem kerül be.</p>
   <div class="kpis" id="pdl-kpis"></div>
   <h3>Gyűjtési napok (PDL)</h3>
   <div class="cal" id="pdl-calendar"></div>
@@ -118,6 +154,13 @@ TEMPLATE = r"""<!DOCTYPE html>
   <div class="card" id="pdl-airline-wins"></div>
   <h3>Legolcsóbb 7 éj csomagok</h3>
   <div class="card" id="pdl-flights"></div>
+  </section>
+
+  <section class="route route-probe" id="probe-block">
+  <h2>Próba — Wizz–LIS–Azores, 7 éj, két jegy</h2>
+  <p class="hint">Nem ütemezett, néhány nap. Négy <strong>közvetlen egyirányú</strong> Google-keresés: BUD→LIS (Wizz, ha van) + utána LIS→PDL (Azores/TAP, min. 90 perc csatlakozás), vissza fordítva. Az összeg webes self-transferhez hasonlítható, de két külön jegy. Ha aznap nincs ráérő szigetjárat, a tábla jelzi.</p>
+  <div class="kpis" id="probe-kpis"></div>
+  <div class="card scroll" id="probe-rows"></div>
   </section>
 
   <h2>Adatszerkezet</h2>
@@ -149,6 +192,7 @@ $("kpis").innerHTML = [
   kpi("Hiba", last.error ?? "—", last.error_hover || ""),
   kpi("Üres / nincs járat", last.empty ?? "—", "A keresés lefutott, de azon a napon nincs közvetlen járat."),
   kpi("Kitűzött RT min", last.pinned_min != null ? Math.round(last.pinned_min).toLocaleString("hu-HU") + " Ft" : "—", last.pinned_hover || ""),
+  kpi("Rugalmas RT min", last.flex_min != null ? Math.round(last.flex_min).toLocaleString("hu-HU") + " Ft" : "—", last.flex_hover || ""),
   kpi("Futási idő", last.duration_label || "—", last.duration_hover || "A teljes gyűjtés faliórája, percben."),
 ].join("");
 
@@ -205,13 +249,14 @@ function spark(id, series, yLabel) {
 function sparkHorizon(id, series, yLabel, opts={}) {
   const svg = $(id);
   if (!series.length) { svg.innerHTML = `<text x="20" y="140" fill="#93a4b5">Még nincs elég adat.</text>`; return; }
+  const H = opts.horizon || HORIZON;
   const { min, max, span } = yRange(series.map(p => p.y));
   const w = 1000, h = 280, padL = 36, padR = 28, padT = 36, padB = 48;
-  const xOf = (days) => padL + (Math.max(0, Math.min(HORIZON, days)) / HORIZON) * (w - padL - padR);
+  const xOf = (days) => padL + (Math.max(0, Math.min(H, days)) / H) * (w - padL - padR);
   const yOf = (val) => h - padB - ((val - min) / span) * (h - padT - padB);
   const pts = series.map(pt => ({ ...pt, px: xOf(pt.days ?? 0), py: yOf(pt.y) }));
   const raw = pts.map(p => `${p.px.toFixed(1)},${p.py.toFixed(1)}`).join(" ");
-  let extra = axisXDays(HORIZON, xOf, h, padB);
+  let extra = axisXDays(H, xOf, h, padB);
   extra += `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="#2b3642"></line>`;
   if (opts.smooth) {
     const avg = movingAvg(series, 7);
@@ -284,6 +329,13 @@ $("pinned-flights").innerHTML = pinnedFlights.length
       pinnedFlights.map(f => `<tr><td>${f.airline}${f.code?" ("+f.code+")":""}</td><td>${f.price}</td><td>${f.outbound}</td><td>${f.inbound}</td></tr>`).join("")
     }</tbody></table>`
   : `<p class="empty">Még nincs járatinfo a kitűzött úthoz.</p>`;
+
+const flexRows = data.flex_combos || [];
+$("flex-flights").innerHTML = flexRows.length
+  ? `<table><thead><tr><th>Oda</th><th>Vissza</th><th>Éj</th><th>Légitársaság</th><th>Járat / idő</th><th>Ár</th></tr></thead><tbody>${
+      flexRows.map(f => `<tr><td>${f.outbound_date}${f.fixed?" (fix)":""}</td><td>${f.return_date}</td><td>${f.nights}</td><td>${f.airline}${f.code?" ("+f.code+")":""}</td><td>${f.flight}</td><td>${f.price}</td></tr>`).join("")
+    }</tbody></table>`
+  : `<p class="empty">Még nincs rugalmas RT adat. A következő 10:00-es MAD gyűjtés tölti.</p>`;
 sparkHorizon("horizon", data.horizon_series || [], "Egyirányú (OW) min", { smooth: true, minLine: true });
 
 const air = data.airline_series || {};
@@ -347,18 +399,19 @@ if (!pdl) {
         pFails.map(f => `<tr><td>${f.collected_on}</td><td>${f.origin}–${f.dest} ${f.outbound_date}${f.return_date?" / "+f.return_date:""}</td><td>${f.error||"—"}</td></tr>`).join("")
       }</tbody></table>`
     : `<p class="empty">Nincs rögzített PDL hiba.</p>`;
-  sparkHorizon("pdl-horizon", pdl.horizon_series || [], "7 éj RT min", { smooth: true, minLine: true });
+  sparkHorizon("pdl-horizon", pdl.horizon_series || [], "7 éj RT min", { smooth: true, minLine: true, horizon: pdl.horizon_days || 90 });
   const pAir = pdl.airline_series || {};
   const pNames = Object.keys(pAir);
   if (pNames.length) {
     const all = pNames.flatMap(n => pAir[n].map(p => p.y));
     const { min, max, span } = yRange(all);
     const w = 1000, h = 280, padL = 36, padR = 28, padT = 36, padB = 48;
-    const xOf = (days) => padL + (Math.max(0, Math.min(HORIZON, days)) / HORIZON) * (w - padL - padR);
+    const PDL_H = pdl.horizon_days || 90;
+    const xOf = (days) => padL + (Math.max(0, Math.min(PDL_H, days)) / PDL_H) * (w - padL - padR);
     const yOf = (val) => h - padB - ((val-min)/span)*(h-padT-padB);
     let svg = `<text x="20" y="22" fill="#93a4b5" font-size="14">Légitársaságonkénti 7 éj RT minimum</text>`;
     svg += `<line x1="${padL}" x2="${w-padR}" y1="${h-padB}" y2="${h-padB}" stroke="#2b3642"></line>`;
-    svg += axisXDays(HORIZON, xOf, h, padB);
+    svg += axisXDays(PDL_H, xOf, h, padB);
     pNames.forEach(n => {
       const series = pAir[n];
       if (!series.length) return;
@@ -385,6 +438,24 @@ if (!pdl) {
         pFlights.map(f => `<tr><td>${f.date}</td><td>${f.return_date||""}</td><td>${f.days}</td><td>${f.airline}${f.code?" ("+f.code+")":""}</td><td>${f.flight}</td><td>${f.stops}</td><td>${f.duration}</td><td>${f.price}</td></tr>`).join("")
       }</tbody></table>`
     : `<p class="empty">Nincs PDL járatlista.</p>`;
+}
+
+const probe = data.probe;
+if (!probe) {
+  $("probe-block").style.display = "none";
+} else {
+  const pr = probe.last_run || {};
+  $("probe-kpis").innerHTML = [
+    kpi("Próba napjai", String((probe.rows || []).length), "Ennyi indulási napra van négy láb összerakva."),
+    kpi("Teljes összeg", pr.min_price != null ? Math.round(pr.min_price).toLocaleString("hu-HU") + " Ft" : "—", pr.min_hover || "A négy egyirányú láb összege, nem Google-csomag."),
+    kpi("Hiányzó láb", pr.missing ?? "—", "Ahol egy OW keresés hibás vagy üres, nincs összeg."),
+  ].join("");
+  const rows = probe.rows || [];
+  $("probe-rows").innerHTML = rows.length
+    ? `<table><thead><tr><th>Oda</th><th>Vissza</th><th>BUD→LIS</th><th>LIS→PDL</th><th>Csatl. oda</th><th>PDL→LIS</th><th>LIS→BUD</th><th>Csatl. vissza</th><th>Összesen</th></tr></thead><tbody>${
+        rows.map(r => `<tr><td>${r.outbound}</td><td>${r.return_date}</td><td>${r.out_via}</td><td>${r.via_dest}</td><td>${r.connect_out}</td><td>${r.dest_via}</td><td>${r.via_home}</td><td>${r.connect_in}</td><td>${r.total}</td></tr>`).join("")
+      }</tbody></table>`
+    : `<p class="empty">Még nincs próba-adat. Futtatás: python -m farewatch collect --scope probe</p>`;
 }
 </script>
 </body>
@@ -434,6 +505,81 @@ def _leg_label(flight: str | None, departure: str | None, arrival: str | None) -
     if number == "—":
         return f"hivatalos idő {times}"
     return f"{number} · {times}"
+
+
+def _flex_combos(
+    conn,
+    settings: Settings,
+    source: str,
+    last_date: str,
+) -> tuple[list[dict[str, Any]], float | None, str]:
+    if not settings.pinned_flex:
+        return [], None, "Nincs rugalmas kitűzés a configban."
+    flex = settings.pinned_flex[0]
+    pairs = flex_rt_pairs(flex)
+    if not pairs:
+        return [], None, "Üres rugalmas rács."
+    out_from, out_to = flex.outbound_from.isoformat(), flex.outbound_to.isoformat()
+    ret_from, ret_to = flex.return_from.isoformat(), flex.return_to.isoformat()
+    rows = conn.execute(
+        """
+        SELECT s.outbound_date, s.return_date, o.airline, o.airline_code,
+               o.price_amount, o.outbound_flights, o.departure_at, o.arrival_at
+        FROM snapshots s
+        JOIN offers o ON o.snapshot_id = s.id
+        WHERE s.trip_type = 'RT'
+          AND s.origin = ?
+          AND s.dest = ?
+          AND s.outbound_date BETWEEN ? AND ?
+          AND s.return_date BETWEEN ? AND ?
+          AND s.collected_on = ?
+          AND s.source = ?
+          AND s.status = 'ok'
+        ORDER BY s.outbound_date, s.return_date, o.price_amount
+        """,
+        (flex.origin, flex.dest, out_from, out_to, ret_from, ret_to, last_date, source),
+    ).fetchall()
+    best: dict[tuple[str, str], Any] = {}
+    for row in rows:
+        key = (row["outbound_date"], row["return_date"])
+        if key not in best:
+            best[key] = row
+    combos: list[dict[str, Any]] = []
+    for outbound, inbound in pairs:
+        row = best.get((outbound.isoformat(), inbound.isoformat()))
+        if not row:
+            continue
+        price = float(row["price_amount"])
+        nights = (inbound - outbound).days
+        fixed = outbound.isoformat() == "2027-03-12" and inbound.isoformat() == "2027-03-15"
+        combos.append(
+            {
+                "outbound_date": outbound.isoformat(),
+                "return_date": inbound.isoformat(),
+                "nights": nights,
+                "fixed": fixed,
+                "airline": row["airline"] or "—",
+                "code": row["airline_code"] or "",
+                "flight": _leg_label(
+                    row["outbound_flights"],
+                    row["departure_at"],
+                    row["arrival_at"],
+                ),
+                "price": _ft(price),
+                "price_amount": price,
+            }
+        )
+    combos.sort(key=lambda item: (item["price_amount"], item["outbound_date"], item["return_date"]))
+    if not combos:
+        return [], None, "Még nincs rugalmas RT adat erről a napról."
+    winner = combos[0]
+    hover = (
+        f"A {last_date}-i 4×4 rács (oda {out_from[5:]}–{out_to[5:]}, "
+        f"vissza {ret_from[5:]}–{ret_to[5:]}) legolcsóbbja: "
+        f"{winner['outbound_date']} → {winner['return_date']}, "
+        f"{winner['airline']}, {winner['price']}."
+    )
+    return combos, float(winner["price_amount"]), hover
 
 
 def _best_ow_leg(
@@ -835,6 +981,281 @@ def _pdl_payload(
     }
 
 
+def _prefer_rank(blob: str, preferred: tuple[str, ...]) -> int:
+    for index, token in enumerate(preferred):
+        if token in blob:
+            return index
+    return 99
+
+
+def _leg_offers(
+    conn,
+    *,
+    collected_on: str,
+    source: str,
+    origin: str,
+    dest: str,
+    outbound_date: str,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT o.airline, o.airline_code, o.outbound_flights, o.departure_at,
+               o.arrival_at, o.price_amount, o.duration_minutes
+        FROM snapshots s
+        JOIN offers o ON o.snapshot_id = s.id
+        WHERE s.trip_type = 'OW'
+          AND s.origin = ?
+          AND s.dest = ?
+          AND s.outbound_date = ?
+          AND s.collected_on = ?
+          AND s.source = ?
+          AND s.status = 'ok'
+        ORDER BY o.price_amount
+        """,
+        (origin, dest, outbound_date, collected_on, source),
+    ).fetchall()
+    return [
+        {
+            "airline": row["airline"] or "—",
+            "code": row["airline_code"] or "",
+            "price": float(row["price_amount"]),
+            "departure_at": row["departure_at"],
+            "arrival_at": row["arrival_at"],
+            "label": (
+                f"{row['airline'] or '—'} "
+                f"{_leg_label(row['outbound_flights'], row['departure_at'], row['arrival_at'])}"
+                f" · {_ft(float(row['price_amount']))}"
+            ),
+        }
+        for row in rows
+    ]
+
+
+def _missing_leg(conn, collected_on: str, source: str, origin: str, dest: str, outbound_date: str) -> dict[str, Any]:
+    snap = conn.execute(
+        """
+        SELECT status, error FROM snapshots
+        WHERE trip_type = 'OW' AND origin = ? AND dest = ?
+          AND outbound_date = ? AND collected_on = ? AND source = ?
+        """,
+        (origin, dest, outbound_date, collected_on, source),
+    ).fetchone()
+    return {
+        "missing": True,
+        "status": snap["status"] if snap else "missing",
+        "error": (snap["error"] if snap else None) or "nincs keresés",
+        "label": "—",
+        "price": None,
+        "departure_at": None,
+        "arrival_at": None,
+    }
+
+
+def _pick_leg(
+    offers: list[dict[str, Any]],
+    preferred: tuple[str, ...],
+    *,
+    after: datetime | None = None,
+    before: datetime | None = None,
+    min_connect: int = 90,
+) -> dict[str, Any] | None:
+    def rank(offer: dict[str, Any]) -> tuple[int, float]:
+        blob = f"{offer['airline']} {offer['code']}".lower()
+        return (_prefer_rank(blob, preferred), float(offer["price"]))
+
+    connecting: list[dict[str, Any]] = []
+    for offer in offers:
+        dep = _parse_iso(offer["departure_at"]) if offer.get("departure_at") else None
+        arr = _parse_iso(offer["arrival_at"]) if offer.get("arrival_at") else None
+        if after is not None:
+            if dep is None or int((dep - after).total_seconds() / 60) < min_connect:
+                continue
+        if before is not None:
+            if arr is None or int((before - arr).total_seconds() / 60) < min_connect:
+                continue
+        connecting.append(offer)
+    pool = connecting if (after is not None or before is not None) and connecting else (
+        [] if after is not None or before is not None else offers
+    )
+    if not pool:
+        return min(offers, key=rank) if offers and after is None and before is None else None
+    chosen = min(pool, key=rank)
+    chosen = dict(chosen)
+    chosen["missing"] = False
+    chosen["preferred"] = _prefer_rank(f"{chosen['airline']} {chosen['code']}".lower(), preferred) < 99
+    return chosen
+
+
+def _connect_label(arrival: str | None, departure: str | None) -> str:
+    start = _parse_iso(arrival) if arrival else None
+    end = _parse_iso(departure) if departure else None
+    if start is None or end is None:
+        return "—"
+    minutes = int((end - start).total_seconds() / 60)
+    hours, mins = divmod(abs(minutes), 60)
+    clock = f"{hours}ó {mins:02d}p"
+    if minutes < 0:
+        return f"nem ér rá ({clock})"
+    if minutes < 90:
+        return f"szűk {clock}"
+    return clock
+
+
+def _probe_payload(
+    conn,
+    settings: Settings,
+    source: str,
+    probe: ViaProbe,
+) -> dict[str, Any]:
+    origin, via, dest = probe.origin, probe.via, probe.dest
+    last = conn.execute(
+        """
+        SELECT MAX(collected_on) AS collected_on
+        FROM snapshots
+        WHERE source = ? AND trip_type = 'OW'
+          AND (
+                (origin = ? AND dest = ?)
+             OR (origin = ? AND dest = ?)
+             OR (origin = ? AND dest = ?)
+             OR (origin = ? AND dest = ?)
+          )
+        """,
+        (source, origin, via, via, dest, dest, via, via, origin),
+    ).fetchone()
+    last_date = last["collected_on"] if last else None
+    home_via = ("wizz",)
+    via_island = ("azores", "sata", "tap")
+    rows_out: list[dict[str, Any]] = []
+    missing = 0
+    min_price = None
+    if last_date:
+        dates = [
+            row["outbound_date"]
+            for row in conn.execute(
+                """
+                SELECT DISTINCT outbound_date
+                FROM snapshots
+                WHERE collected_on = ? AND source = ? AND trip_type = 'OW'
+                  AND origin = ? AND dest = ?
+                ORDER BY outbound_date
+                """,
+                (last_date, source, origin, via),
+            )
+        ]
+        for outbound in dates:
+            inbound = (
+                date.fromisoformat(outbound) + timedelta(days=probe.stay_nights)
+            ).isoformat()
+        for outbound in dates:
+            inbound = (
+                date.fromisoformat(outbound) + timedelta(days=probe.stay_nights)
+            ).isoformat()
+            out_offers = _leg_offers(
+                conn, collected_on=last_date, source=source,
+                origin=origin, dest=via, outbound_date=outbound,
+            )
+            island_out_offers = _leg_offers(
+                conn, collected_on=last_date, source=source,
+                origin=via, dest=dest, outbound_date=outbound,
+            )
+            island_in_offers = _leg_offers(
+                conn, collected_on=last_date, source=source,
+                origin=dest, dest=via, outbound_date=inbound,
+            )
+            home_in_offers = _leg_offers(
+                conn, collected_on=last_date, source=source,
+                origin=via, dest=origin, outbound_date=inbound,
+            )
+            out_via = (
+                _pick_leg(out_offers, home_via)
+                if out_offers
+                else _missing_leg(conn, last_date, source, origin, via, outbound)
+            )
+            via_home = (
+                _pick_leg(home_in_offers, home_via)
+                if home_in_offers
+                else _missing_leg(conn, last_date, source, via, origin, inbound)
+            )
+            out_arr = _parse_iso(out_via.get("arrival_at")) if out_via and not out_via.get("missing") else None
+            in_dep = _parse_iso(via_home.get("departure_at")) if via_home and not via_home.get("missing") else None
+            via_dest = _pick_leg(island_out_offers, via_island, after=out_arr) if island_out_offers else None
+            if via_dest is None:
+                via_dest = (
+                    _pick_leg(island_out_offers, via_island)
+                    if island_out_offers
+                    else _missing_leg(conn, last_date, source, via, dest, outbound)
+                )
+                if via_dest and not via_dest.get("missing"):
+                    via_dest = dict(via_dest)
+                    via_dest["label"] = via_dest["label"] + " (nem csatlakozik)"
+            dest_via = _pick_leg(island_in_offers, via_island, before=in_dep) if island_in_offers else None
+            if dest_via is None:
+                dest_via = (
+                    _pick_leg(island_in_offers, via_island)
+                    if island_in_offers
+                    else _missing_leg(conn, last_date, source, dest, via, inbound)
+                )
+                if dest_via and not dest_via.get("missing"):
+                    dest_via = dict(dest_via)
+                    dest_via["label"] = dest_via["label"] + " (nem csatlakozik)"
+            if out_via and not out_via.get("missing"):
+                out_via = dict(out_via)
+                out_via.setdefault("missing", False)
+            if via_home and not via_home.get("missing"):
+                via_home = dict(via_home)
+                via_home.setdefault("missing", False)
+            legs = (out_via, via_dest, dest_via, via_home)
+            if any(leg and leg.get("missing") for leg in legs):
+                missing += 1
+                total_n = None
+                total_s = "—"
+            else:
+                total_n = sum(float(leg["price"]) for leg in legs)  # type: ignore[arg-type]
+                total_s = _ft(total_n)
+                if min_price is None or total_n < min_price:
+                    min_price = total_n
+            rows_out.append(
+                {
+                    "outbound": outbound,
+                    "return_date": inbound,
+                    "out_via": out_via["label"] if out_via else "—",
+                    "via_dest": via_dest["label"] if via_dest else "—",
+                    "dest_via": dest_via["label"] if dest_via else "—",
+                    "via_home": via_home["label"] if via_home else "—",
+                    "connect_out": _connect_label(
+                        None if not out_via or out_via.get("missing") else out_via.get("arrival_at"),
+                        None if not via_dest or via_dest.get("missing") else via_dest.get("departure_at"),
+                    ),
+                    "connect_in": _connect_label(
+                        None if not dest_via or dest_via.get("missing") else dest_via.get("arrival_at"),
+                        None if not via_home or via_home.get("missing") else via_home.get("departure_at"),
+                    ),
+                    "total": total_s,
+                    "total_amount": total_n,
+                }
+            )
+    last_run = {
+        "collected_on": last_date,
+        "min_price": min_price,
+        "missing": missing,
+        "min_hover": (
+            "A négy közvetlen egyirányú láb összege az utolsó próba-gyűjtésből. "
+            "Nem Google oda-vissza csomag."
+            if min_price is not None
+            else "Még nincs teljes négy-lábas összeg."
+        ),
+    }
+    return {
+        "origin": origin,
+        "via": via,
+        "dest": dest,
+        "stay_nights": probe.stay_nights,
+        "offsets": list(probe.offsets),
+        "last_run": last_run,
+        "rows": rows_out,
+    }
+
+
 def build_payload(conn, settings: Settings, today: date | None = None) -> dict[str, Any]:
     today = today or date.today()
     generated = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
@@ -891,6 +1312,10 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
         "error": 0,
         "empty": 0,
         "pinned_min": None,
+        "flex_min": None,
+        "flex_hover": (
+            "A márc. 10–13 oda × 14–17 vissza rács (16 RT csomag) legolcsóbb ára."
+        ),
         "duration_minutes": None,
         "duration_label": "—",
         "duration_hover": "Még nincs mért futási idő.",
@@ -902,6 +1327,7 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
             "gyűjtésből. RT = round-trip (oda-vissza), nem két egyirányú összege."
         ),
     }
+    flex_combos: list[dict[str, Any]] = []
     if last_date:
         last_run.update(by_day[last_date])
         last_run.update(
@@ -973,6 +1399,9 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
                 f"A {last_date}-i gyűjtésből: 2027-03-12 BUD→MAD + 2027-03-15 MAD→BUD "
                 f"csomag legolcsóbb ára ({source}). RT = oda-vissza, nem két OW összege."
             )
+        flex_combos, flex_min, flex_hover = _flex_combos(conn, settings, source, last_date)
+        last_run["flex_min"] = flex_min
+        last_run["flex_hover"] = flex_hover
 
     failures = [
         dict(row)
@@ -1221,6 +1650,7 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
         "pinned_series": pinned_series,
         "pinned_airline_series": pinned_airline_series,
         "pinned_flights": pinned_flights,
+        "flex_combos": flex_combos,
         "horizon_series": horizon_series,
         "airline_series": airline_series,
         "airline_wins": airline_wins,
@@ -1228,6 +1658,11 @@ def build_payload(conn, settings: Settings, today: date | None = None) -> dict[s
         "pdl": (
             _pdl_payload(conn, settings, source, today, settings.stay_horizons[0])
             if settings.stay_horizons
+            else None
+        ),
+        "probe": (
+            _probe_payload(conn, settings, source, settings.via_probes[0])
+            if settings.via_probes
             else None
         ),
     }
@@ -1246,11 +1681,13 @@ def write_dashboard(settings: Settings, today: date | None = None) -> Path:
             "pinned_series": [],
             "pinned_airline_series": {},
             "pinned_flights": [],
+            "flex_combos": [],
             "horizon_series": [],
             "airline_series": {},
             "airline_wins": [],
             "cheapest_flights": [],
             "pdl": None,
+            "probe": None,
         }
     else:
         conn = connect(settings.db_path)

@@ -16,6 +16,8 @@ def _settings(tmp_path):
         reports_dir=tmp_path / "reports",
         backups_dir=tmp_path / "backups",
         docs_dir=tmp_path / "docs",
+        request_delay_seconds=0,
+        request_jitter_seconds=0,
     )
 
 
@@ -28,12 +30,12 @@ def test_mock_collect_and_idempotent(tmp_path):
         pinned_only=True,
         today=today,
     )
-    assert first.planned == 3
-    assert first.ok == 3
+    assert first.planned == 18
+    assert first.ok == 18
     assert first.skipped == 0
     assert first.duration_seconds >= 0
     raw_files = list((tmp_path / "raw").glob("*.json"))
-    assert len(raw_files) == 3
+    assert len(raw_files) == 18
 
     second = collect(
         settings,
@@ -41,7 +43,7 @@ def test_mock_collect_and_idempotent(tmp_path):
         pinned_only=True,
         today=today,
     )
-    assert second.skipped == 3
+    assert second.skipped == 18
     assert second.ok == 0
 
     forced = collect(
@@ -51,7 +53,7 @@ def test_mock_collect_and_idempotent(tmp_path):
         today=today,
         force=True,
     )
-    assert forced.ok == 3
+    assert forced.ok == 18
 
     conn = connect(settings.db_path)
     try:
@@ -61,8 +63,8 @@ def test_mock_collect_and_idempotent(tmp_path):
         ).fetchone()
     finally:
         conn.close()
-    assert info["snapshots"] == 3
-    assert info["offers"] == 9
+    assert info["snapshots"] == 18
+    assert info["offers"] == 54
     assert info["pinned_recent"]
     assert info["pinned_recent"][0]["min_price"] is not None
     assert runs["n"] == 3
@@ -80,12 +82,12 @@ def test_retries_error_snapshots_without_force(tmp_path):
 
     again = collect(settings, source_name="mock", pinned_only=True, today=today)
     assert again.skipped == 0
-    assert again.ok == 3
+    assert again.ok == 18
 
     conn = connect(settings.db_path)
     try:
         info = status_rows(conn)
     finally:
         conn.close()
-    assert info["by_status"].get("ok") == 3
+    assert info["by_status"].get("ok") == 18
     assert info["by_status"].get("error") is None

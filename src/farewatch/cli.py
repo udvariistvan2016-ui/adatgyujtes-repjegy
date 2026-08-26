@@ -128,9 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
     collect_p.add_argument("--pinned-only", action="store_true")
     collect_p.add_argument(
         "--scope",
-        choices=["mad", "stay"],
+        choices=["mad", "stay", "probe"],
         default="mad",
-        help="mad: BUD–MAD horizont + kitűzött út (alap, 10:00). stay: Azori 7 éj naptár (15:00).",
+        help="mad: BUD–MAD (10:00). stay: Azori 7 éj (15:00). probe: Wizz–LIS–Azores próba.",
     )
     collect_p.add_argument("--force", action="store_true", help="Mai snapshot felülírása")
     collect_p.add_argument("--dry-run", action="store_true")

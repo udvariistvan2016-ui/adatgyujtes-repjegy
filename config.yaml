@@ -38,11 +38,31 @@ pinned_trips:
     return_date: "2027-03-15"
     collect_oneways: true
 
+# Kitűzött rugalmas: oda márc. 10–13. × vissza márc. 14–17. = 16 RT csomag.
+# A 12–15. már a pinned_trips-ben van, a gyűjtő nem kéri kétszer.
+pinned_flex:
+  - origin: BUD
+    dest: MAD
+    outbound_from: "2027-03-10"
+    outbound_to: "2027-03-13"
+    return_from: "2027-03-14"
+    return_to: "2027-03-17"
+
 # Azori naptár: külön délutáni futás (`collect --scope stay`). A 10:00-es MAD ezt nem látja.
-# 7 éj = vissza D+7. Később: a legolcsóbb napok körül 4/6/8 éj (kevés extra keresés).
+# 7 éj = vissza D+7. 90 nap: a 180-as próba ~2 hónap után csak parser-hiba volt.
 stay_horizons:
   - origin: BUD
     dest: PDL
-    horizon_days: 180
+    horizon_days: 90
     stay_nights: 7
     max_stops: 1
+
+# Kézi próba, nem ütemezett: `collect --scope probe`.
+# Négy közvetlen egyirányú / nap (BUD–LIS, LIS–PDL, és vissza D+7), összeg = self-transfer becslés.
+via_probes:
+  - origin: BUD
+    via: LIS
+    dest: PDL
+    stay_nights: 7
+    max_stops: 0
+    offsets: [14, 21, 28, 35, 42]

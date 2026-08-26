@@ -15,6 +15,8 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
         reports_dir=tmp_path / "reports",
         backups_dir=tmp_path / "backups",
         docs_dir=tmp_path / "docs",
+        request_delay_seconds=0,
+        request_jitter_seconds=0,
     )
     collect(settings, source_name="mock", pinned_only=True, today=date(2026, 8, 21))
     collect(
@@ -22,6 +24,13 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
         source_name="mock",
         scope="stay",
         limit=2,
+        today=date(2026, 8, 21),
+    )
+    collect(
+        settings,
+        source_name="mock",
+        scope="probe",
+        limit=1,
         today=date(2026, 8, 21),
     )
     path = write_dashboard(settings, today=date(2026, 8, 21))
@@ -36,6 +45,10 @@ def test_dashboard_marks_errors_and_writes_html(tmp_path):
     assert "Adatszerkezet" in html
     assert "Futási idő" in html
     assert "Oda (márc. 12.)" in html
+    assert "Kitűzött rugalmas" in html
     assert (tmp_path / "docs" / ".nojekyll").exists()
     assert "Azori" in html
     assert '"dest": "PDL"' in html or "PDL" in html
+    assert "route-azores" in html
+    assert "Wizz–LIS–Azores" in html
+    assert "probe-block" in html
